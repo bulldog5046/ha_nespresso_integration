@@ -27,6 +27,7 @@ from homeassistant.helpers.entity import Entity
 from homeassistant.components.bluetooth import async_ble_device_from_address
 
 from .nespresso import NespressoClient
+from .machines import Temprature, BrewType
 from bleak import BleakClient
 from bleak_retry_connector import establish_connection
 
@@ -86,10 +87,6 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
     scan_interval = SCAN_INTERVAL
     mac = config.data.get(CONF_ADDRESS)
     auth = config.data.get(CONF_TOKEN)
-    #scan_interval = config.get(CONF_SCAN_INTERVAL).total_seconds()
-    #mac = config.get(CONF_MAC)
-    #mac = None if mac == '' else mac
-    #auth = config.get(CONF_TOKEN)
 
     _LOGGER.debug("Searching for Nespresso sensors...")
     try:
@@ -127,16 +124,26 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
         return
 
     async_add_entities(ha_entities, True)
-
     
-    async def make_a_cofee(call):
+    async def brew(call):
         """Send a command command."""
-        mac = call.data.get('mac')
-        _LOGGER.debug("make_a_cofee mac {} ".format(mac))
-        _LOGGER.debug("make_a_cofee call {} ".format(call))
-        return Nespressodetect.make_coffee_flow(mac)
+        try:
+            brewType = BrewType[call.data.get('brew_type').upper()]
+            temprature = Temprature[call.data.get('brew_temp').upper()]
+        except KeyError:
+            _LOGGER.debug(f"Brew Failed - Recepie: {brewType}, Temp: {temprature} ")
+        
+        try:
+            ble_device = async_ble_device_from_address(hass, mac)
+            client = await establish_connection(BleakClient, ble_device, mac)
+            await Nespressodetect.auth(client)
+            return await Nespressodetect.brew_predefined(client, brew=brewType, temp=temprature)
+        except:
+            _LOGGER.debug(f"Brew Failed - Recepie: {brewType}, Temp: {temprature} ")
 
-    hass.services.async_register(DOMAIN, "coffee", make_a_cofee)    
+        return None
+
+    hass.services.async_register(DOMAIN, "coffee", brew)    
     
 class NespressoSensor(Entity):
     """General Representation of an Nespresso sensor."""

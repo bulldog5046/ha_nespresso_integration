@@ -1,23 +1,25 @@
 coffee:
   description: Make a coffee
-    fields:
-      # Key of the field
-      brew_temp:
-        # Whether or not field is required (default = false)
-        required: true
-        # Example value that can be passed for this field
-        example: "low"
-        # The default field value
-        default: "medium"
-        # Selector (https://www.home-assistant.io/docs/blueprint/selectors/) to control
-        # the input UI for this field
-        selector:
-          select:
-            translation_key: "brew_temp"
-            options:
-              - "low"
-              - "medium"
-              - "high"
-    mac:
-      description: mac address of the machine
-      example: '"d2:12:f1:7b:cd:6d"'
+  fields:
+    brew_temp:
+      required: true
+      default: Medium
+      selector:
+        select:
+          options:
+            - Low
+            - Medium
+            - High
+    brew_type:
+      required: true
+      default: Lungo
+      selector:
+        select:
+          options:
+            - Ristretto
+            - Espresso
+            - Lungo
+            - Americano
+            - label: Hot Water
+              value: HOT_WATER
+

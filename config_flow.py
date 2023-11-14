@@ -142,14 +142,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 print(f"Connected: {client.is_connected}")
                 paired = await client.pair(protection_level=2)
                 print(f"Paired: {paired}")
-                # try:
-                #     await client.pair(protection_level=2)
-                # except Exception as e:
-                #     _LOGGER.error(f"Failed to pair to device: {e}")
-                #     return self.async_show_form(
-                #         step_id="user",
-                #         errors={"base": "cannot_pair"}
-                #     )
             
                 await device.load_model(client)
                 onboarded = await device.get_onboard_status(client)
