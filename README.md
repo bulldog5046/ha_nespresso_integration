@@ -19,7 +19,7 @@ This project is still a work in progress
 # Example
 ![Example Card](examples/Screenshot%202023-11-14%20232456.png)
 
-Create two helpers for the dropdown lists with the values available in the machines.BrewType and machines.Temprature enums.
+Create two helpers for the dropdown lists with the values available in the machines.BrewType and machines.Temprature enums. Low or mixed case values on the dropdown for appearance. The text values will be converted up uppercase within the service call.
 
 ![Helpers](examples/Screenshot%202023-11-14%20233208.png)
 
