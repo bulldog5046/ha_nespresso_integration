@@ -16,7 +16,32 @@ This project is still a work in progress
 * Direct pairing/auth (No need to extract auth_key from mobile app)
 * Reworked to use the native Home Assistant bleak bluetooth library
 
-# Example
+# Examples
+## Basic button
+![Basic Card](examples/Screenshot%202023-11-14%20233944.png)
+
+A basic button card can directly call the service with the data provided if you only want a simple button option, or if you want a dashboard with various button options.
+
+```
+show_name: true
+show_icon: true
+type: button
+tap_action:
+  action: toggle
+entity: sensor.expert_milk_d1e1037c4a9d_always_1
+hold_action:
+  action: call-service
+  service: nespresso.coffee
+  target: {}
+  data:
+    brew_temp: Medium
+    brew_type: Lungo
+show_state: false
+icon: mdi:coffee
+name: Brew Americano
+```
+
+## Selecable Options
 ![Example Card](examples/Screenshot%202023-11-14%20232456.png)
 
 Create two helpers for the dropdown lists with the values available in the machines.BrewType and machines.Temprature enums. Low or mixed case values on the dropdown for appearance. The text values will be converted up uppercase within the service call.
@@ -34,4 +59,19 @@ brew_coffee:
         brew_type: "{{ states('input_select.brew_type') }}"
         brew_temp: "{{ states('input_select.brew_temp') }}"
   alias: Brew Coffee
+```
+
+Create the card.
+
+```
+type: entities
+title: Coffee Maker Controls
+entities:
+  - entity: input_select.brew_type
+  - entity: input_select.brew_temp
+  - type: button
+    tap_action:
+      action: call-service
+      service: script.brew_coffee
+    name: Brew Coffee
 ```
