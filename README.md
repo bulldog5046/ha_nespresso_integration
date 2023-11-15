@@ -102,3 +102,23 @@ icon_height: 50px
 show_state: false
 icon: mdi:coffee-outline
 ```
+
+# Troubleshooting
+
+While working on this project I've observed some quirks with Home Assistant and Bluetooth. In an effort to help people resolve their own problems, here are the most common things i've come across.
+
+1. **The machine only brews once**
+
+This is an easy one. The lid must be cycled between brew events when controlled over bluetooth.
+
+2. **The pairing process fails**
+
+I've seen various combinations of systems and bluetooth dongles that seem to fail the standard bluetooth pairing. The easiest way to verify this on your system is to run bluetoothctl and manually attempt to pair. You should see the same error in the Home Assistant logs.
+
+![bluetoothctl failing](examples/Screenshot%202023-11-15%20180414.png)
+
+Frustratingly, this issue may go away if you try the same dongle on a different system. I can only assume its a driver related issue.
+
+3. **The device is setup but there are no entities**
+
+Something went wrong when installing the new auth_key. Delete the device from Home Assistant, factory reset the machine and try again.
