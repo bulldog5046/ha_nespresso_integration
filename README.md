@@ -16,6 +16,9 @@ This project is still a work in progress
 * Direct pairing/auth (No need to extract auth_key from mobile app)
 * Reworked to use the native Home Assistant bleak bluetooth library
 
+# Requirements
+* The integration expects the machine to be in a factory reset state and ready for a new device to be paired.
+
 # Examples
 ## Basic button
 ![Basic Card](examples/Screenshot%202023-11-14%20233944.png)
@@ -81,7 +84,6 @@ entities:
 
 The service supports optional configuration parameters to allow you to create your own ideal recipe. When adding the call service to a button card you can define the quantity of coffee and water in mililiters to dispense.
 
-**YAML**
 ```
 show_name: true
 show_icon: true
