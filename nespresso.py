@@ -1,6 +1,7 @@
 import asyncio
 import pprint
 from bleak import BleakScanner, BleakClient, BLEDevice
+from bleak_retry_connector import establish_connection
 from .machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name
 from datetime import datetime, timedelta
 import binascii
@@ -53,6 +54,48 @@ class NespressoClient():
         self.isOnboard = None
         self.machine: MachineType | None = None
         self.address = mac
+        self._conn: None | BleakClient = None
+
+    async def connect(self, device: BLEDevice) -> bool:
+        # Return early if already connected
+        if self._conn:
+            if self._conn.is_connected:
+                return True
+        
+        # Establish new connection
+        client = await establish_connection(BleakClient, device, device.address)
+        paired = device.details['props']['Paired']
+        if not paired and client.is_connected:
+            client.pair()
+        
+        # Try to onboard if not already
+        if not self.isOnboard:
+            await self.get_onboard_status(client)
+            if not self.isOnboard:
+                self.auth_code = self.generate_auth_key()
+                await self.onboard(client)
+                await self.get_onboard_status(client)
+                if not self.isOnboard:
+                    _LOGGER.error(f'Failed to onboard {device.name}')
+                    return False
+
+        if self.auth_code and paired and client.is_connected:
+            await self.auth(client)
+
+        try:
+            # Test reading protected property to verify auth
+            state = await client.read_gatt_char(CHAR_UUID_STATE, response=True)
+        except Exception as e:
+            _LOGGER.error(f'Failed to connect to Nespresso device: {device.name}')
+            return False
+
+        self._conn = client    
+        return True
+
+
+    async def disconnect(self) -> None:
+        await self._conn.disconnect()
+        self._conn = None
 
     async def scan(self):
         print("Scanning for 5 seconds, please wait...")
@@ -70,14 +113,14 @@ class NespressoClient():
 
         return len(self.nespresso_devices)
 
-    async def get_info(self, client: BleakClient, tries=0):
+    async def get_info(self, tries=0):
         self.devices = {}
         try:
-            device = await self.load_model(client)
-            device.mac_address = client.address
+            device = await self.load_model()
+            device.mac_address = self._conn.address
             for characteristic in device_info_characteristics:
                 try:
-                    data = await client.read_gatt_char(characteristic.uuid)
+                    data = await self._conn.read_gatt_char(characteristic.uuid)
                     setattr(device, characteristic.name, data.decode(characteristic.format))
                 except Exception as e:
                     print(f'Error reading characteristic {characteristic.name}: {e}')
@@ -87,24 +130,24 @@ class NespressoClient():
         self.devices[device.mac_address] = device
         return self.devices
     
-    async def get_sensors(self, client: BleakClient):
+    async def get_sensors(self):
         self.sensors = {}
         sensor_characteristics =  []
         for uuid in sensors_characteristics:
-            characteristic = client.services.get_characteristic(uuid)
+            characteristic = self._conn.services.get_characteristic(uuid)
             if characteristic:
                 sensor_characteristics.append(characteristic.uuid)
-        self.sensors[client.address] = sensor_characteristics
+        self.sensors[self._conn.address] = sensor_characteristics
         return self.sensors
 
-    async def get_sensor_data(self, client):
+    async def get_sensor_data(self):
         now = datetime.now()
         if self.data_last_updated is None or now - self.data_last_updated > self.data_update_interval:
             self.data_last_updated = now
             for mac, characteristics in self.sensors.items():
                 for characteristic in characteristics:
                     try:
-                        data = await client.read_gatt_char(characteristic)
+                        data = await self._conn.read_gatt_char(characteristic)
                         if characteristic in sensor_decoders:
                             sensor_data = sensor_decoders[characteristic].decode_data(data)
                             if self.sensordata.get(mac) is None:
@@ -118,18 +161,17 @@ class NespressoClient():
     
     async def get_onboard_status(self, client: BleakClient):
         try:
-            test = await client.read_gatt_char(CHAR_UUID_ONBOARD_STATUS, response=True) 
             onboard = await client.read_gatt_char(CHAR_UUID_ONBOARD_STATUS) != bytearray(b'\x00')
         except Exception as e:
             _LOGGER.error('Couldn\'t read onboarding status of device. Probably BT Dongle incompatible?')
         self.isOnboard = onboard
         return self.isOnboard
 
-    async def load_model(self, client: BleakClient):
+    async def load_model(self):
         try:
-            serial = await client.read_gatt_char(CHAR_UUID_SERIAL)
+            serial = await self._conn.read_gatt_char(CHAR_UUID_SERIAL)
             serial = serial.decode('utf-8')
-            device_name = await client.read_gatt_char(CHAR_UUID_DEVICE_NAME)
+            device_name = await self._conn.read_gatt_char(CHAR_UUID_DEVICE_NAME)
             device_name = device_name.decode('utf-8')
 
             self.machine = CoffeeMachineFactory.get_coffee_machine(device_name, serial)
@@ -152,7 +194,6 @@ class NespressoClient():
                 _LOGGER.error('Onboarding not permitted. Already paired?')
 
     def notification_handler(self, sender, data):
-        # Assuming the notification handler decodes the response
         self.brew_response = sensor_decoders[CHAR_UUID_CMDRESP].decode_data(data)
 
     def generate_auth_key(self):
@@ -160,23 +201,23 @@ class NespressoClient():
         hex_string = unique_id.hex
         return hex_string[:16]
 
-    async def brew_predefined(self, client: BleakClient, brew: BrewType = BrewType.RISTRETTO, temp: Temprature = Temprature.MEDIUM):
-        if BrewType.is_brew_applicable_for_machine(brew, self.devices[client.address].model):
+    async def brew_predefined(self, brew: BrewType = BrewType.RISTRETTO, temp: Temprature = Temprature.MEDIUM):
+        if BrewType.is_brew_applicable_for_machine(brew, self.devices[self._conn.address].model):
             try:
                 self.brew_response = None
                 command = "03050704" # Recepies
                 command += "00000000" # Padding?
 
                 # Temprature Selection
-                command += temp.value if self.devices[client.address].configurations['temprature_control'] else Temprature.MEDIUM.value
+                command += temp.value if self.devices[self._conn.address].configurations['temprature_control'] else Temprature.MEDIUM.value
 
                 # Brew Selection
                 command += brew.value
 
                 # Subscribe to Brew notifications
-                await client.start_notify(CHAR_UUID_CMDRESP, self.notification_handler)
+                await self._conn.start_notify(CHAR_UUID_CMDRESP, self.notification_handler)
 
-                await client.write_gatt_char(CHAR_UUID_BREW, binascii.unhexlify(command), response=True)
+                await self._conn.write_gatt_char(CHAR_UUID_BREW, binascii.unhexlify(command), response=True)
 
                 for _ in range(10):  # Wait up to 10 seconds
                     if self.brew_response is not None:
@@ -184,7 +225,7 @@ class NespressoClient():
                     await asyncio.sleep(1)  # Wait for 1 second before checking again
 
                 # Unsubscribe from the Brew notifications
-                await client.stop_notify(CHAR_UUID_CMDRESP)
+                await self._conn.stop_notify(CHAR_UUID_CMDRESP)
 
                 return self.brew_response
             except Exception as e:

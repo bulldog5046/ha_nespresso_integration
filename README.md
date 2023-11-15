@@ -11,7 +11,7 @@ https://github.com/tikismoke/home-assistant-nespressoble
 This project is still a work in progress
 
 # Features
-* Native configuration flow for Hoem Assistant
+* Native configuration flow for Home Assistant
 * Device discovery
 * Direct pairing/auth (No need to extract auth_key from mobile app)
 * Reworked to use the native Home Assistant bleak bluetooth library

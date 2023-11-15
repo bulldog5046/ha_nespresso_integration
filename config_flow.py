@@ -137,20 +137,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 device = NespressoClient(mac=discovered.address)
                 ble_device = async_ble_device_from_address(self.hass, discovered.address)
-                client = await establish_connection(BleakClient, ble_device, discovered.name)
-
-                print(f"Connected: {client.is_connected}")
-                paired = await client.pair(protection_level=2)
-                print(f"Paired: {paired}")
-            
-                await device.load_model(client)
-                onboarded = await device.get_onboard_status(client)
-                domain_data = self.hass.data.get(DOMAIN, {})
-                if not onboarded and discovered.name not in domain_data:
-                    device.auth_code = device.generate_auth_key()
-                    await device.onboard(client)
-
-                await client.disconnect()
+                await device.connect(ble_device)
+                await device.load_model()
+                await device.disconnect()
             except Exception as e:
                 _LOGGER.error(f"Failed to connect to device: {e}")
                 return self.async_show_form(

@@ -92,33 +92,31 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
     try:
         Nespressodetect = NespressoClient(scan_interval, auth, mac)
         ble_device = async_ble_device_from_address(hass, mac)
-        client = await establish_connection(BleakClient, ble_device, mac)
-        await client.pair(protection_level=2)
-        await Nespressodetect.auth(client)
+        await Nespressodetect.connect(ble_device)
     except UnboundLocalError:
         raise ConfigEntryNotReady()
     try:
         _LOGGER.debug("Getting info about device(s)")
-        devices_info = await Nespressodetect.get_info(client)
+        devices_info = await Nespressodetect.get_info()
         for mac, dev in devices_info.items():
             _LOGGER.info("{}: {}".format(mac, dev))
 
         _LOGGER.debug("Getting sensors")
-        devices_sensors = await Nespressodetect.get_sensors(client)
+        devices_sensors = await Nespressodetect.get_sensors()
         for mac, sensors in devices_sensors.items():
             for sensor in sensors:
                 _LOGGER.debug("{}: Found sensor UUID: {}".format(mac, sensor))
 
         _LOGGER.debug("Get initial sensor data to populate HA entities")
         ha_entities = []
-        sensordata = await Nespressodetect.get_sensor_data(client)
+        sensordata = await Nespressodetect.get_sensor_data()
         for mac, data in sensordata.items():
             for name, val in data.items():
                 _LOGGER.debug("{}: {}: {}".format(mac, name, val))
                 ha_entities.append(NespressoSensor(mac, auth, name, Nespressodetect, devices_info[mac].manufacturer,
                                                    DEVICE_SENSOR_SPECIFICS[name]))
         
-        await client.disconnect()
+        await Nespressodetect.disconnect()
     except:
         _LOGGER.exception("Failed intial setup.")
         return
@@ -135,9 +133,13 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
         
         try:
             ble_device = async_ble_device_from_address(hass, mac)
-            client = await establish_connection(BleakClient, ble_device, mac)
-            await Nespressodetect.auth(client)
-            return await Nespressodetect.brew_predefined(client, brew=brewType, temp=temprature)
+            conn_status = await Nespressodetect.connect(ble_device)
+            if conn_status:
+                response =  await Nespressodetect.brew_predefined(brew=brewType, temp=temprature)
+                await Nespressodetect.disconnect()
+                return response
+            _LOGGER.error(f"Connection failed with {ble_device.name}")
+            return None
         except:
             _LOGGER.debug(f"Brew Failed - Recepie: {brewType}, Temp: {temprature} ")
 
@@ -205,13 +207,12 @@ class NespressoSensor(Entity):
                 if self.device.data_last_updated is None or now - self.device.data_last_updated > SCAN_INTERVAL:
                     try:
                         ble_device = async_ble_device_from_address(self.hass, self._mac)
-                        client = await establish_connection(BleakClient, ble_device, self._mac)
-                        await self.device.auth(client)
+                        conn_status = await self.device.connect(ble_device)
                     except UnboundLocalError:
                         raise ConfigEntryNotReady()
 
-                    await self.device.get_sensor_data(client)
-                    await client.disconnect()
+                    await self.device.get_sensor_data()
+                    await self.device.disconnect()
         value = self.device.sensordata[self._mac][self._sensor_name]
 
         if self._sensor_specifics.unit_scale is None:
