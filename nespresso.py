@@ -64,10 +64,12 @@ class NespressoClient():
         
         # Establish new connection
         client = await establish_connection(BleakClient, device, device.address)
-        paired = device.details['props']['Paired']
-        if not paired and client.is_connected:
-            client.pair()
-        
+        # Pair() has it's own protection against duplicate pairing requests so we just call 
+        # it blind in an attempt to negate the constant issues with BT peripherals.
+        # The additional sleep step is a further attempt to battle BT gremlins
+        await client.pair()
+        await asyncio.sleep(2)
+
         # Try to onboard if not already
         if not self.isOnboard:
             await self.get_onboard_status(client)
@@ -79,7 +81,7 @@ class NespressoClient():
                     _LOGGER.error(f'Failed to onboard {device.name}')
                     return False
 
-        if self.auth_code and paired and client.is_connected:
+        if self.auth_code and client.is_connected:
             await self.auth(client)
 
         try:
