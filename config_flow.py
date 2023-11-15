@@ -93,9 +93,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(discovery_info.address)
         self._abort_if_unique_id_configured()
         device = NespressoClient(mac=discovery_info.address)
-        client = establish_connection(discovery_info.device)
-        await device.load_model(client)
-        await client.disconnect()
+        ble_device = async_ble_device_from_address(self.hass, discovery_info.address)
+        await device.connect(ble_device)
+        await device.load_model()
+        await device.disconnect()
         if not supported(discovery_info.name):
             return self.async_abort(reason="not_supported")
         self._discovery = discovery_info
