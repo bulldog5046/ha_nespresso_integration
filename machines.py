@@ -85,6 +85,7 @@ class CoffeeMachine:
         # Default configurations for a generic coffee machine
         return {
             'temprature_control': False,
+            'custom_recipes': False
         }
 
     def __repr__(self) -> dict:
@@ -99,6 +100,7 @@ class ExpertMachine(CoffeeMachine):
         configurations = super().default_configurations()
         configurations.update({
             'temprature_control': True,
+            'custom_recipes': True
         })
         return configurations
 

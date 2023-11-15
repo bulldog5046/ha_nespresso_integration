@@ -2,7 +2,7 @@ coffee:
   description: Make a coffee
   fields:
     brew_temp:
-      required: true
+      required: false
       default: Medium
       selector:
         select:
@@ -11,7 +11,7 @@ coffee:
             - Medium
             - High
     brew_type:
-      required: true
+      required: false
       default: Lungo
       selector:
         select:
@@ -22,4 +22,22 @@ coffee:
             - Americano
             - label: Hot Water
               value: HOT_WATER
+    coffee_ml:
+      required: false
+      default: 100
+      selector:
+        number:
+          min: 10
+          max: 130
+          unit_of_measurement: ml
+          mode: slider
+    water_ml:
+      required: false
+      default: 100
+      selector:
+        number:
+          min: 10
+          max: 255
+          unit_of_measurement: ml
+          mode: slider
 

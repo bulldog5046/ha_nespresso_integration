@@ -75,3 +75,28 @@ entities:
       service: script.brew_coffee
     name: Brew Coffee
 ```
+
+## Custom recipes
+![Custom Recipes](examples/Screenshot%202023-11-15%20142912.png)
+
+The service supports optional configuration parameters to allow you to create your own ideal recipe. When adding the call service to a button card you can define the quantity of coffee and water in mililiters to dispense.
+
+**YAML**
+```
+show_name: true
+show_icon: true
+type: button
+tap_action:
+  action: call-service
+  service: nespresso.coffee
+  target: {}
+  data:
+    coffee_ml: 123
+    water_ml: 69
+    brew_temp: Medium
+entity: sensor.expert_milk_d1e1037c4a9d_always_1
+name: Custom Recipe
+icon_height: 50px
+show_state: false
+icon: mdi:coffee-outline
+```

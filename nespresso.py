@@ -205,7 +205,7 @@ class NespressoClient():
         if BrewType.is_brew_applicable_for_machine(brew, self.devices[self._conn.address].model):
             try:
                 self.brew_response = None
-                command = "03050704" # Recepies
+                command = "03050704" # Recipes
                 command += "00000000" # Padding?
 
                 # Temprature Selection
@@ -230,6 +230,40 @@ class NespressoClient():
                 return self.brew_response
             except Exception as e:
                 print(f'Error Brewing: {e}')
+
+    async def brew_custom(self, coffee_ml: int = 100, water_ml: int = 100, temp: Temprature = Temprature.MEDIUM):
+        if not self.machine.configurations['custom_recipes']:
+            _LOGGER.error(f'Custom Recepies are not supported for {self.machine}')
+            return False
+
+        prep_command = "0110080000" # custom recipes
+        prep_command += "01" # Ingredient Coffee
+        prep_command += f"{coffee_ml:04x}" # Qty in ml
+        prep_command += "02" # Ingredient Water
+        prep_command += f"{water_ml:04x}" # Qty in ml
+
+        brew_command = "03050704" # Brew command
+        brew_command += "00000000" # Padding?
+        brew_command += temp.value if self.machine.configurations['temprature_control'] else Temprature.MEDIUM.value
+        brew_command += "07" # Custom Recipe
+
+        # Subscribe to Brew notifications
+        await self._conn.start_notify(CHAR_UUID_CMDRESP, self.notification_handler)
+
+        await self._conn.write_gatt_char(CHAR_UUID_BREW, binascii.unhexlify(prep_command), response=True)
+
+        await self._conn.write_gatt_char(CHAR_UUID_BREW, binascii.unhexlify(brew_command), response=True)
+
+        for _ in range(10):  # Wait up to 10 seconds
+            if self.brew_response is not None:
+                break
+            await asyncio.sleep(1)  # Wait for 1 second before checking again
+
+        # Unsubscribe from the Brew notifications
+        await self._conn.stop_notify(CHAR_UUID_CMDRESP)
+
+        return self.brew_response
+
 
 async def main():
     nespresso_client = NespressoClient(180, '8f2aa3c13a61ac60')

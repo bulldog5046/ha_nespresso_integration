@@ -126,16 +126,22 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
     async def brew(call):
         """Send a command command."""
         try:
-            brewType = BrewType[call.data.get('brew_type').upper()]
-            temprature = Temprature[call.data.get('brew_temp').upper()]
+            brewType = BrewType[call.data.get('brew_type').upper()] if call.data.get('brew_type') else None
+            temprature = Temprature[call.data.get('brew_temp').upper()] if call.data.get('brew_temp') else Temprature.MEDIUM
+            coffee_ml = call.data.get('coffee_ml')
+            water_ml = call.data.get('water_ml')
         except KeyError:
+            brewType = None
             _LOGGER.debug(f"Brew Failed - Recepie: {brewType}, Temp: {temprature} ")
         
         try:
             ble_device = async_ble_device_from_address(hass, mac)
             conn_status = await Nespressodetect.connect(ble_device)
             if conn_status:
-                response =  await Nespressodetect.brew_predefined(brew=brewType, temp=temprature)
+                if coffee_ml and water_ml:
+                    response =  await Nespressodetect.brew_custom(coffee_ml=coffee_ml, water_ml=water_ml, temp=temprature)
+                else:
+                    response =  await Nespressodetect.brew_predefined(brew=brewType, temp=temprature)
                 await Nespressodetect.disconnect()
                 return response
             _LOGGER.error(f"Connection failed with {ble_device.name}")
