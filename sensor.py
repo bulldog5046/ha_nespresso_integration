@@ -160,13 +160,15 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
             conn_status = await Nespressodetect.connect(ble_device)
             if conn_status:
                 if caps:
-                    response =  await Nespressodetect.update_caps_counter(caps)
+                    caps = int(round(caps))
+                    await Nespressodetect.update_caps_counter(caps)
                     await Nespressodetect.get_sensor_data()
-                    return response
+                    _LOGGER.debug(f'Cap Counter updated')
+                    return True
             _LOGGER.error(f"Connection failed with {ble_device.name}")
             return None
-        except:
-            _LOGGER.debug(f"Brew Failed - Recepie: {brewType}, Temp: {temprature} ")
+        except Exception as e:
+            _LOGGER.exception("Updating caps counter failed: %s", e)
 
         return None
     
