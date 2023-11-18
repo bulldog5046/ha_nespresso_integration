@@ -151,7 +151,28 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
 
         return None
 
-    hass.services.async_register(DOMAIN, "coffee", brew)    
+    async def caps(call):
+        """Update the caps counter"""
+        caps = call.data.get('caps')
+
+        try: 
+            ble_device = async_ble_device_from_address(hass, mac)
+            conn_status = await Nespressodetect.connect(ble_device)
+            if conn_status:
+                if caps:
+                    response =  await Nespressodetect.update_caps_counter(caps)
+                    await Nespressodetect.get_sensor_data()
+                    return response
+            _LOGGER.error(f"Connection failed with {ble_device.name}")
+            return None
+        except:
+            _LOGGER.debug(f"Brew Failed - Recepie: {brewType}, Temp: {temprature} ")
+
+        return None
+    
+
+    hass.services.async_register(DOMAIN, "coffee", brew)
+    hass.services.async_register(DOMAIN, "caps", caps)
     
 class NespressoSensor(Entity):
     """General Representation of an Nespresso sensor."""

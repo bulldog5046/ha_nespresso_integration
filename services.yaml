@@ -40,4 +40,15 @@ coffee:
           max: 255
           unit_of_measurement: ml
           mode: slider
-
+caps:
+  description: Manage caps counter
+  fields:
+    caps:
+      required: true
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 1000
+          step: 1
+          mode: box

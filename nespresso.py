@@ -2,7 +2,10 @@ import asyncio
 import pprint
 from bleak import BleakScanner, BleakClient, BLEDevice
 from bleak_retry_connector import establish_connection
-from .machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name
+try:
+    from .machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name
+except ImportError:
+    from machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name
 from datetime import datetime, timedelta
 import binascii
 import uuid
@@ -76,12 +79,14 @@ class NespressoClient():
             if not self.isOnboard:
                 self.auth_code = self.generate_auth_key()
                 await self.onboard(client)
+                await asyncio.sleep(3)
                 await self.get_onboard_status(client)
                 if not self.isOnboard:
                     _LOGGER.error(f'Failed to onboard {device.name}')
                     return False
 
         if self.auth_code and client.is_connected:
+            _LOGGER.debug(f'Nespresso auth_key: {self.auth_code}')
             await self.auth(client)
 
         try:
@@ -265,16 +270,27 @@ class NespressoClient():
         await self._conn.stop_notify(CHAR_UUID_CMDRESP)
 
         return self.brew_response
+    
+    async def update_caps_counter(self, caps: int):
+        if not caps > 0 and not caps < 1000:
+            _LOGGER.error(f'Value of caps must be between 1 and 1000')
+            return
+        
+        caps = format(caps, '04x') if caps else None
+        
+        response = await self._conn.write_gatt_char('06aa3a15-f22a-11e3-9daa-0002a5d5c51b', binascii.unhexlify(caps), response=True)
+
+        return response
 
 
 async def main():
-    nespresso_client = NespressoClient(180, '8f2aa3c13a61ac60')
+    nespresso_client = NespressoClient(180, 'e2e1ced1eb814706', 'D1:E1:03:7C:4A:9D')
 
-    if not nespresso_client.nespresso_devices:
-        await nespresso_client.scan()
+    #if not nespresso_client.nespresso_devices:
+    #    await nespresso_client.scan()
 
     for mac in nespresso_client.nespresso_devices:
-        async with BleakClient(BLEDevice('D1:E1:03:7C:4A:9D', 'Expert&Milk_D1E1037C4A9D', details={'path': '/org/bluez/hci1/dev_D1_E1_03_7C_4A_9D', 'props': {'Address': 'D1:E1:03:7C:4A:9D', 'AddressType': 'random', 'Name': 'Expert&Milk_D1E1037C4A9D', 'Alias': 'Expert&Milk_D1E1037C4A9D', 'Paired': True, 'Bonded': False, 'Trusted': False, 'Blocked': False, 'LegacyPairing': False}}, rssi=-60)) as client:
+        async with BleakClient('D1:E1:03:7C:4A:9D') as client:
             print(f"Connected: {client.is_connected}")
             try:
                 paired = await client.pair(protection_level=2)
@@ -284,13 +300,16 @@ async def main():
                 onboarded = await client.read_gatt_char(CHAR_UUID_ONBOARD_STATUS) != bytearray(b'\x00')
 
                 print(f'Onboarded: {onboarded}')
-                exit()
+                
                 if not onboarded:
                     await nespresso_client.onboard(client)
 
                 await nespresso_client.auth(client)
+                nespresso_client._conn = client
 
-                await nespresso_client.get_info(client)
+                await nespresso_client.update_caps_counter(100)
+
+                await nespresso_client.get_info()
 
                 sensor_characteristics =  []
                 for uuid in sensors_characteristics:
@@ -317,12 +336,6 @@ async def main():
             pp = pprint.PrettyPrinter(indent=4)
 
             pp.pprint(nespresso_client.sensordata[mac])
-
-            print('Sending brew..')
-
-            response = await nespresso_client.brew_predefined(client)
-
-            pp.pprint(response)
 
             await client.disconnect()
 
