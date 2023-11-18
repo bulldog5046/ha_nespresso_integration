@@ -103,6 +103,43 @@ show_state: false
 icon: mdi:coffee-outline
 ```
 
+## Caps Counter
+![Caps Counter](examples/Screenshot%202023-11-18%20205241.png)
+
+Reading/writing the caps counter is supported. Be aware that the counter doesn't update until the next time the machine is polled for sensor data (every 5 minutes). 
+
+Example card
+```
+type: vertical-stack
+cards:
+  - show_state: true
+    show_name: false
+    camera_view: auto
+    type: picture-entity
+    entity: sensor.expert_milk_d1e1037c4a9d_caps_number
+    image: /local/NespressoCaps.png
+  - type: entities
+    entities:
+      - entity: input_number.caps_counter
+        name: Set New Counter Total
+      - type: call-service
+        name: Update Capsule Count
+        action_name: Set Counter
+        service: script.update_capsule_count
+    show_header_toggle: false
+```
+
+**scripts.yaml**
+```
+update_capsule_count:
+  alias: Update Capsule Count
+  sequence:
+    - service: nespresso.caps
+      data:
+        caps: "{{ states('input_number.caps_counter') }}"
+  mode: single
+```
+
 # Troubleshooting
 
 While working on this project I've observed some quirks with Home Assistant and Bluetooth. In an effort to help people resolve their own problems, here are the most common things i've come across.
