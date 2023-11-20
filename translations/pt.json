@@ -1,0 +1,27 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "Equipamento já configurado",
+            "already_in_progress": "Equipamento já se encontra a ser configurado",
+            "no_devices_found": "Equipamentos não encontrados na ede"
+        },
+        "error": {
+            "cannot_connect": "Falha na ligação",
+            "cannot_pair": "Não consigo emparelhar",
+            "invalid_auth": "Autenticação invalida",
+            "unknown": "Erro desconhecido"
+        },
+        "step": {
+            "bluetooth_confirm": {
+                "description": "Deseja configurar o  {name}?"
+            },
+            "user": {
+                "data": {
+                    "host": "Host",
+                    "password": "Senha",
+                    "username": "Utilizador"
+                }
+            }
+        }
+    }
+}
