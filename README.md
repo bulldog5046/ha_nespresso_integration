@@ -1,8 +1,3 @@
-# Help Wanted
-Development has stalled due to my machine no longer responding to bluetooth commands. Seeking help from anyone that can share a full packet capture of the pairing & setup process via the original app.
-
-https://github.com/bulldog5046/ha_nespresso_integration/issues/6
-
 # Nespresso
 
 Nespresso Bluetooth integration for Home Assistant.
