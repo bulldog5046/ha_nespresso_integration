@@ -3,9 +3,11 @@
     "step": {
       "user": {
         "data": {
-          "host": "[%key:common::config_flow::data::host%]",
-          "username": "[%key:common::config_flow::data::username%]",
-          "password": "[%key:common::config_flow::data::password%]"
+          "device": "[%key:common::config_flow::data::device%]",
+          "auth_token": "[%key:common::config_flow::data::access_token%]"
+        },
+        "data_description": {
+          "auth_token": "Optional"
         }
       },
       "bluetooth_confirm": {

@@ -3,9 +3,9 @@ import pprint
 from bleak import BleakScanner, BleakClient, BLEDevice
 from bleak_retry_connector import establish_connection
 try:
-    from .machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name
+    from .machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name, decode_machine_information
 except ImportError:
-    from machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name
+    from machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name, decode_machine_information, decode_pairing_key_state
 from datetime import datetime, timedelta
 import binascii
 import uuid
@@ -26,6 +26,7 @@ CHAR_UUID_PAIR = '06aa3a61-f22a-11e3-9daa-0002a5d5c51b'
 CHAR_UUID_CMDRESP = '06aa3a52-f22a-11e3-9daa-0002a5d5c51b'
 CHAR_UUID_SERIAL = '06aa3a31-f22a-11e3-9daa-0002a5d5c51b'
 CHAR_UUID_BREW = '06aa3a42-f22a-11e3-9daa-0002a5d5c51b'
+CHAR_UUID_INFO = '06aa3a21-f22a-11e3-9daa-0002a5d5c51b'
 
 Characteristic = namedtuple('Characteristic', ['uuid', 'name', 'format'])
 
@@ -33,7 +34,8 @@ manufacturer_characteristics = Characteristic(CHAR_UUID_MANUFACTURER_NAME, 'manu
 device_info_characteristics = [manufacturer_characteristics,
                                Characteristic(CHAR_UUID_DEVICE_NAME, 'device_name', "utf-8"),
                                Characteristic(CHAR_UUID_SERIAL, 'serial', "utf-8"),
-                               Characteristic(CHAR_UUID_ONBOARD_STATUS, 'paired_status', "utf-8")]
+                               Characteristic(CHAR_UUID_ONBOARD_STATUS, 'paired_status', "utf-8"),
+                               Characteristic(CHAR_UUID_INFO, 'device_info', "utf-8")]
 sensors_characteristics = [CHAR_UUID_STATE, CHAR_UUID_NBCAPS,
                            CHAR_UUID_SLIDER, CHAR_UUID_WATER_HARDNESS]
 
@@ -42,7 +44,9 @@ sensor_decoders = {str(CHAR_UUID_STATE):BaseDecode(name="state", format_type='st
                    str(CHAR_UUID_SLIDER):BaseDecode(name="slider", format_type='slider'),
                    str(CHAR_UUID_WATER_HARDNESS):BaseDecode(name="water_hardness", format_type='water_hardness'),
                    str(CHAR_UUID_CMDRESP):BaseDecode(name="command_response", format_type='command_response'),
-                   str(CHAR_UUID_ONBOARD_STATUS):BaseDecode(name="pairing_key", format_type="paired_status")}
+                   str(CHAR_UUID_ONBOARD_STATUS):BaseDecode(name="pairing_key", format_type="paired_status"),
+                   str(CHAR_UUID_INFO):BaseDecode(name="device_info", format_type="device_info")
+                   }
 
 class NespressoClient():
     def __init__(self, scan_interval=timedelta(seconds=180), AUTH_CODE=None, mac=None, device: BLEDevice = None) -> None:
@@ -54,6 +58,7 @@ class NespressoClient():
         self.data_update_lock = asyncio.Lock()
         self.data_last_updated: datetime | None = None
         self.brew_response = None
+        self.state_response = None
         self.isOnboard = None
         self.machine: MachineType | None = None
         self.address = mac
@@ -128,7 +133,15 @@ class NespressoClient():
             for characteristic in device_info_characteristics:
                 try:
                     data = await self._conn.read_gatt_char(characteristic.uuid)
-                    setattr(device, characteristic.name, data.decode(characteristic.format))
+                    if characteristic.name == 'device_info':
+                        dmi = decode_machine_information(data)
+                        setattr(device, 'hw_version', dmi['Hardware Version'])
+                        setattr(device, 'fw_version', 
+                                f"{dmi['Main Firmware Version']}, "
+                                f"Bootloader: {dmi['Bootloader Version']}, "
+                                f"Connectivity Firmware: {dmi['Connectivity Firmware Version']}")
+                    else:
+                        setattr(device, characteristic.name, data.decode(characteristic.format))
                 except Exception as e:
                     print(f'Error reading characteristic {characteristic.name}: {e}')
         except Exception as e:
@@ -164,6 +177,9 @@ class NespressoClient():
                     except Exception as e:
                         print(f'Error: {e}')
                         return None
+            end = datetime.now()
+            diff = end - now
+            _LOGGER.debug(f'get_sensor_data() took {diff}')
             return self.sensordata
     
     async def get_onboard_status(self, client: BleakClient):
@@ -193,15 +209,20 @@ class NespressoClient():
     async def onboard(self, client: BleakClient):
         try:
             # Write the txLevel to LOW
-            await client.write_gatt_char(CHAR_UUID_PAIR, bytearray([1]), response=True)
+            txLevelResponse = await client.write_gatt_char(CHAR_UUID_PAIR, bytearray([1]), response=True)
+            print(txLevelResponse)
             # Write the auth code
-            await client.write_gatt_char(CHAR_UUID_AUTH, binascii.unhexlify(self.auth_code), response=True)
+            authCodeResponse = await client.write_gatt_char(CHAR_UUID_AUTH, binascii.unhexlify(self.auth_code), response=True)
+            print(authCodeResponse)
         except Exception as e:
             if e.dbus_error == 'org.bluez.Error.NotPermitted':
                 _LOGGER.error('Onboarding not permitted. Already paired?')
 
     def notification_handler(self, sender, data):
         self.brew_response = sensor_decoders[CHAR_UUID_CMDRESP].decode_data(data)
+
+    def state_notification_handler(self, sender, data):
+        self.state_response = data
 
     def generate_auth_key(self):
         unique_id = uuid.uuid4()
@@ -284,7 +305,7 @@ class NespressoClient():
 
 
 async def main():
-    nespresso_client = NespressoClient(180, 'e2e1ced1eb814706', 'D1:E1:03:7C:4A:9D')
+    nespresso_client = NespressoClient(180, '888cd4d9403865e1', 'D1:E1:03:7C:4A:9D')
 
     #if not nespresso_client.nespresso_devices:
     #    await nespresso_client.scan()
@@ -300,16 +321,61 @@ async def main():
                 onboarded = await client.read_gatt_char(CHAR_UUID_ONBOARD_STATUS) != bytearray(b'\x00')
 
                 print(f'Onboarded: {onboarded}')
-                
-                if not onboarded:
-                    await nespresso_client.onboard(client)
+
+                # factory reset?
+                #await client.write_gatt_char(CHAR_UUID_AUTH, binascii.unhexlify('030700'), response=True)
 
                 await nespresso_client.auth(client)
+
+                machineinfo = await client.read_gatt_char('06aa3a21-f22a-11e3-9daa-0002a5d5c51b')
+
+                pairingKeyState = await client.read_gatt_char(CHAR_UUID_ONBOARD_STATUS)
+
+                print(
+                    decode_machine_information(machineinfo)
+                    )
+                print('Paring key state: ',
+                    decode_pairing_key_state(pairingKeyState)
+                )
+
+                #await nespresso_client.auth(client)
                 nespresso_client._conn = client
 
-                await nespresso_client.update_caps_counter(100)
+                # read setupComplete
+                setup = await client.read_gatt_char(CHAR_UUID_SLIDER)
+                print('Setup status: ', setup)
+
+                state = await client.read_gatt_char(CHAR_UUID_STATE)
+                print('state status: ', state)
+
+                
+                # await nespresso_client._conn.start_notify(CHAR_UUID_STATE, nespresso_client.state_notification_handler)
+
+                # #await client.write_gatt_char(CHAR_UUID_AUTH, binascii.unhexlify('030700'), response=True)
+
+                # for _ in range(10):  # Wait up to 10 seconds
+                #     if nespresso_client.state_response is not None:
+                #         break
+                #     await asyncio.sleep(1)  # Wait for 1 second before checking again
+
+                # # Unsubscribe from the Brew notifications
+                # await nespresso_client._conn.stop_notify(CHAR_UUID_STATE)
+
+                # print('State notification: ',nespresso_client.state_response)
+
+                # write setupComplete
+                #await client.write_gatt_char(CHAR_UUID_SLIDER, bytearray([1]), response=True)
 
                 await nespresso_client.get_info()
+
+                # get error
+
+                await client.write_gatt_char('06aa3a13-f22a-11e3-9daa-0002a5d5c51b', binascii.unhexlify('01'))
+                error = await client.read_gatt_char('06aa3a23-f22a-11e3-9daa-0002a5d5c51b')
+
+                print(f'Error: {error}')
+
+                await nespresso_client.update_caps_counter(100)
 
                 sensor_characteristics =  []
                 for uuid in sensors_characteristics:
@@ -332,6 +398,7 @@ async def main():
                             print(f'Error: {e}')
             except Exception as e:
                 print(f'some error: {e}')
+                await client.disconnect()
 
             pp = pprint.PrettyPrinter(indent=4)
 

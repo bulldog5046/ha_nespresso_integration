@@ -79,6 +79,8 @@ class CoffeeMachine:
         self.model = model
         self.name = name
         self.serial = serial
+        self.fw_version = None
+        self.hw_version = None
         self.configurations = self.default_configurations()
 
     def default_configurations(self):
@@ -186,6 +188,14 @@ class BaseDecode:
             res = val != bytearray(b'\x00')
         elif self.format_type == "water_hardness":
             res = int.from_bytes(val[2:3],byteorder='big')
+        elif self.format_type == "device_info":
+            return {
+                "hw_version": int.from_bytes(val[0:2],byteorder='big'),
+                "bootloader_version": int.from_bytes(val[2:4],byteorder='big'),
+                "main_firmware_version": int.from_bytes(val[4:6],byteorder='big'),
+                "connectivity_firmware_version": int.from_bytes(val[6:8],byteorder='big'),
+                "device_address": ':'.join('{:02x}'.format(byte) for byte in val[8:])
+            }
         elif self.format_type == "slider":
             res = binascii.hexlify(val)
             if (res) == b'00':
@@ -238,6 +248,121 @@ class BaseDecode:
             #_LOGGER.debug("state_decoder else")
             res = val
         return {self.name:res}
+    
+def decode_machine_information(byte_array):
+    """
+    Decodes a bytearray into the MachineInformation properties.
+
+    Parameters:
+    byte_array (bytearray): A bytearray containing the machine information.
+
+    Returns:
+    dict: A dictionary containing the decoded properties.
+    """
+
+    def bytes_to_int(byte_pair):
+        """Converts a pair of bytes to an integer."""
+        return int.from_bytes(byte_pair, byteorder='big')
+
+    def bytes_to_mac_address(byte_array):
+        """Converts a bytearray to a MAC address string."""
+        return ':'.join('{:02x}'.format(byte) for byte in byte_array)
+
+    # Extract bytes for each property
+    hardware_version_bytes = byte_array[0:2]
+    bootloader_version_bytes = byte_array[2:4]
+    main_firmware_version_bytes = byte_array[4:6]
+    connectivity_firmware_version_bytes = byte_array[6:8]
+    device_address_bytes = byte_array[8:]
+
+    # Decode each property
+    hardware_version = bytes_to_int(hardware_version_bytes)
+    bootloader_version = bytes_to_int(bootloader_version_bytes)
+    main_firmware_version = bytes_to_int(main_firmware_version_bytes)
+    connectivity_firmware_version = bytes_to_int(connectivity_firmware_version_bytes)
+    device_address = bytes_to_mac_address(device_address_bytes)
+
+    # Returning the decoded properties in a dictionary
+    return {
+        "Hardware Version": VersionInformation(hardware_version).format_standard_version(),
+        "Bootloader Version": VersionInformation(bootloader_version).format_standard_version(),
+        "Main Firmware Version": VersionInformation(main_firmware_version).format_standard_version(),
+        "Connectivity Firmware Version": ConnectivityFirmwareVersion(connectivity_firmware_version).format_standard_version(),
+        "Device Address": device_address
+    }
+
+def decode_pairing_key_state(byte_buffer):
+    """
+    Decodes the pairing key state from a given byte buffer.
+
+    Parameters:
+    byte_buffer (bytearray): A bytearray containing the pairing key state.
+
+    Returns:
+    str: The decoded pairing key state as a string.
+    """
+
+    # Assuming the pairing key state is at a specific index, for example, index 0
+    pairing_key_state_index = 0
+    pairing_key_state_byte = byte_buffer[pairing_key_state_index]
+
+    # Mapping the byte value to the pairing key state
+    if pairing_key_state_byte in [0, 1]:
+        return "ABSENT"
+    elif pairing_key_state_byte == 2:
+        return "PRESENT"
+    elif pairing_key_state_byte == 3:
+        return "UNDEFINED"
+    else:
+        raise ValueError(f"Undefined PairingKeyState: {pairing_key_state_byte}")
+    
+class VersionInformation:
+    MAJOR_VERSION_MULTIPLIER = 100
+
+    def __init__(self, version):
+        self.version = version
+
+    def get_major_version(self):
+        return self.version // self.MAJOR_VERSION_MULTIPLIER
+
+    def get_minor_version(self):
+        return self.version % self.MAJOR_VERSION_MULTIPLIER
+
+    def is_available(self):
+        return self.version > 0
+
+    def format_standard_version(self):
+        if not self.is_available():
+            return None
+        return "{}.{}".format(self.get_major_version(), self.get_minor_version())
+
+class ConnectivityFirmwareVersion:
+    MAJOR_VERSION_MULTIPLIER = 10000
+    MINOR_VERSION_MULTIPLIER = 100
+
+    def __init__(self, version):
+        self.version = version
+
+    def get_build_version(self):
+        return self.version % self.MINOR_VERSION_MULTIPLIER
+
+    def get_major_version(self):
+        return self.version // self.MAJOR_VERSION_MULTIPLIER
+
+    def get_minor_version(self):
+        return (self.version % self.MAJOR_VERSION_MULTIPLIER) // self.MINOR_VERSION_MULTIPLIER
+
+    def is_available(self):
+        return self.version > 0
+
+    def format_standard_version(self):
+        if not self.is_available():
+            return None
+        return "{}.{}.{}".format(
+            self.get_major_version(),
+            self.get_minor_version(),
+            self.get_build_version()
+        )
 
 
 

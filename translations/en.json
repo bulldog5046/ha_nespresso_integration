@@ -17,9 +17,11 @@
             },
             "user": {
                 "data": {
-                    "host": "Host",
-                    "password": "Password",
-                    "username": "Username"
+                    "auth_token": "Access token",
+                    "device": "Device"
+                },
+                "data_description": {
+                    "auth_token": "Optional"
                 }
             }
         }

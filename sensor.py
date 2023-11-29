@@ -16,6 +16,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.components.sensor import PLATFORM_SCHEMA
+from homeassistant.helpers import device_registry as dr
 from homeassistant.const import (ATTR_DEVICE_CLASS, ATTR_ICON, CONF_ADDRESS,
                                  CONF_NAME, CONF_RESOURCE, CONF_SCAN_INTERVAL,
                                  CONF_UNIT_SYSTEM, DEVICE_CLASS_TIMESTAMP,
@@ -23,7 +24,7 @@ from homeassistant.const import (ATTR_DEVICE_CLASS, ATTR_ICON, CONF_ADDRESS,
                                  CONF_TOKEN)
 from homeassistant.components.binary_sensor import (PLATFORM_SCHEMA, BinarySensorEntity,
                                                    DEVICE_CLASS_MOTION, DEVICE_CLASS_DOOR)
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.entity import Entity, DeviceInfo
 from homeassistant.components.bluetooth import async_ble_device_from_address
 
 from .nespresso import NespressoClient
@@ -33,7 +34,7 @@ from bleak_retry_connector import establish_connection
 
 _LOGGER = logging.getLogger(__name__)
 
-SCAN_INTERVAL = timedelta(seconds=120)
+SCAN_INTERVAL = timedelta(seconds=60)
 
 DEVICE_CLASS_CAPS='caps'
 CAPS_UNITS = 'caps'
@@ -88,6 +89,9 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
     mac = config.data.get(CONF_ADDRESS)
     auth = config.data.get(CONF_TOKEN)
 
+    _LOGGER.debug("Create the top level device..")
+    device_registry = dr.async_get(hass)
+
     _LOGGER.debug("Searching for Nespresso sensors...")
     try:
         Nespressodetect = NespressoClient(scan_interval, auth, mac)
@@ -100,6 +104,20 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
         devices_info = await Nespressodetect.get_info()
         for mac, dev in devices_info.items():
             _LOGGER.info("{}: {}".format(mac, dev))
+
+        NespressoDeviceEntry = device_registry.async_get_or_create(
+            config_entry_id=config.entry_id,
+            connections={(dr.CONNECTION_NETWORK_MAC, mac)},
+            identifiers={(DOMAIN, mac)},
+            manufacturer="Nespresso",
+            suggested_area="Kitchen",
+            name=dev.name,
+            model=dev.model.name,
+            sw_version=dev.fw_version,
+            hw_version=dev.hw_version,
+            serial_number=dev.serial,
+        )
+
 
         _LOGGER.debug("Getting sensors")
         devices_sensors = await Nespressodetect.get_sensors()
@@ -114,7 +132,7 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
             for name, val in data.items():
                 _LOGGER.debug("{}: {}: {}".format(mac, name, val))
                 ha_entities.append(NespressoSensor(mac, auth, name, Nespressodetect, devices_info[mac].manufacturer,
-                                                   DEVICE_SENSOR_SPECIFICS[name]))
+                                                   DEVICE_SENSOR_SPECIFICS[name], NespressoDeviceEntry))
         
         await Nespressodetect.disconnect()
     except:
@@ -162,7 +180,8 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
                 if caps:
                     caps = int(round(caps))
                     await Nespressodetect.update_caps_counter(caps)
-                    await Nespressodetect.get_sensor_data()
+                    await Nespressodetect.disconnect()
+                    Nespressodetect.sensordata[mac]['caps_number'] = caps
                     _LOGGER.debug(f'Cap Counter updated')
                     return True
             _LOGGER.error(f"Connection failed with {ble_device.name}")
@@ -178,18 +197,29 @@ async def async_setup_entry(hass: HomeAssistant, config: ConfigEntry, async_add_
     
 class NespressoSensor(Entity):
     """General Representation of an Nespresso sensor."""
-    def __init__(self, mac, auth, name, device, device_info, sensor_specifics):
+    def __init__(self, mac, auth, name, device, device_info, sensor_specifics, device_entry):
         """Initialize a sensor."""
+        self._device_entry = device_entry
         self.device = device
         self._mac = mac
         self.auth = auth
         self._name = '{}-{}'.format(device_info, name)
         _LOGGER.debug("Added sensor entity {}".format(self._name))
         self._sensor_name = name
-
         self._device_class = sensor_specifics.device_class
         self._state = STATE_UNKNOWN
         self._sensor_specifics = sensor_specifics
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return the device info."""
+        return DeviceInfo(
+            identifiers={
+                # Serial numbers are unique identifiers within a specific domain
+                (DOMAIN, self._mac)
+            },
+            name=self.name
+        )
 
     @property
     def name(self):
@@ -249,5 +279,7 @@ class NespressoSensor(Entity):
         else:
             self._state = round(float(value * self._sensor_specifics.unit_scale), 2)
 
+        end = datetime.now()
+        _LOGGER.debug(f'async_update() took {end - now}')
         _LOGGER.debug("State {} {}".format(self._name, self._state))
     

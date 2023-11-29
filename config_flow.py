@@ -11,6 +11,7 @@ from homeassistant.const import CONF_ADDRESS, CONF_NAME, CONF_TOKEN
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
+import homeassistant.helpers.config_validation as cv
 from homeassistant.components.bluetooth import (
     BluetoothScanningMode,
     BluetoothServiceInfo,
@@ -27,16 +28,6 @@ from bleak_retry_connector import establish_connection
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-
-# TODO adjust the data schema to the data that you need
-STEP_USER_DATA_SCHEMA = vol.Schema(
-    {
-        vol.Required("host"): str,
-        vol.Required("username"): str,
-        vol.Required("password"): str,
-    }
-)
-
 
 class PlaceholderHub:
     """Placeholder class to make tests pass.
@@ -108,11 +99,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Confirm discovery."""
         assert self._discovery is not None
 
-        if user_input is not None:
-            if not isPairing(self._discovery):
-                return await self.async_step_wait_for_pairing_mode()
+        # if user_input is not None:
+        #     if not isPairing(self._discovery):
+        #         return await self.async_step_wait_for_pairing_mode()
 
-            return self._create_snooz_entry(self._discovery)
+        #     return self._create_snooz_entry(self._discovery)
 
         self._set_confirm_only()
         assert self._discovery.name
@@ -137,6 +128,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 device = NespressoClient(mac=discovered.address)
+                if user_input[CONF_TOKEN]:
+                    device.auth_code = user_input[CONF_TOKEN]
                 ble_device = async_ble_device_from_address(self.hass, discovered.address)
                 await device.connect(ble_device)
                 await device.load_model()
@@ -165,19 +158,22 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if not self._discovered_devices:
             return self.async_abort(reason="no_devices_found")
-
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema(
+        
+        data_schema=vol.Schema(
                 {
                     vol.Required(CONF_NAME): vol.In(
                         [
                             d.name
                             for d in self._discovered_devices.values()
                         ]
-                    )
+                    ),
+                    vol.Optional(CONF_TOKEN): cv.string
                 }
-            ),
+            )
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=data_schema
         )
     
     def _create_nespresso_entry(self, device) -> FlowResult:
