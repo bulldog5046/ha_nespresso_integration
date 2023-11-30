@@ -27,7 +27,7 @@ coffee:
       default: 100
       selector:
         number:
-          min: 10
+          min: 15
           max: 130
           unit_of_measurement: ml
           mode: slider
@@ -36,8 +36,8 @@ coffee:
       default: 100
       selector:
         number:
-          min: 10
-          max: 255
+          min: 25
+          max: 300
           unit_of_measurement: ml
           mode: slider
 caps:
