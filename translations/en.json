@@ -17,12 +17,10 @@
             },
             "user": {
                 "data": {
-                    "auth_token": "Access token",
-                    "device": "Device"
+                    "device": "Device",
+                    "token": "Access token"
                 },
-                "data_description": {
-                    "auth_token": "Optional"
-                }
+                "description": "Please choose your device from the list below to start the pairing process. Ensure that your device is in factory reset mode and ready to pair with a new device. Alternatively, you can enter an existing authentication key if you have one."
             }
         }
     }
