@@ -17,10 +17,13 @@ This project is still a work in progress
 * Native configuration flow for Home Assistant
 * Device discovery
 * Direct pairing/auth (No need to extract auth_key from mobile app)
+* Option to reuse an exiting auth_key if you have one
 * Reworked to use the native Home Assistant bleak bluetooth library
 
 # Requirements
-* The integration expects the machine to be in a factory reset state and ready for a new device to be paired.
+* The integration can either reuse an existing auth_key, if known. Or can begin a new paring process.
+
+WARNING: I discovered an oversight in the machines bluetooth programming that can lead to the machine falling into a state where it cannot be paired with any more devices. The number seems to be around 25 before the bluetooth module runs out of memory to store the pairing keys and will fail to operate correctly. The only way to restore the machine is this happens is to hook up a JTAG programmer and manually erase the flash sectors. Therefore, its preferable if you already know an existing auth key to reuse it for this integration.
 
 # Examples
 ## Basic button
