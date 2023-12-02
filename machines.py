@@ -1,68 +1,8 @@
-from enum import Enum, auto
-from collections import defaultdict
 import ctypes, binascii
-
-class MachineType(Enum):
-    EXPERT = auto()
-    VTP2 = auto()
-    BLUE = auto()
-    PRODIGIO = auto()
-
-class BrewType(Enum):
-    RISTRETTO = '00'
-    ESPRESSO = '01'
-    LUNGO = '02'
-    HOT_WATER = '04'
-    AMERICANO = '05'
-
-    def is_brew_applicable_for_machine(brew, machine_type: MachineType) -> bool:
-        return brew in APPLICABLE_BREW[machine_type]
-
-class Temprature(Enum):
-    LOW = '01'
-    MEDIUM = '00'
-    HIGH = '02'
-
-class CupSizeType(Enum):
-    RISTRETTO = auto()
-    ESPRESSO = auto()
-    LUNGO = auto()
-    AMERICANO_COFFEE = auto()
-    AMERICANO_WATER = auto()
-    AMERICANO_XL_COFFEE = auto()
-    AMERICANO_XL_WATER = auto()
-    HOT_WATER = auto()
-    HOT_WATER_VTP2 = auto()
-
-    def is_cup_size_applicable_for_machine(cup_size, machine_type: MachineType) -> bool:
-        return cup_size in APPLICABLE_CUP_SIZES[machine_type]
-
-
-APPLICABLE_CUP_SIZES = defaultdict(list)
-APPLICABLE_CUP_SIZES[MachineType.EXPERT] = [
-    CupSizeType.RISTRETTO, CupSizeType.ESPRESSO, CupSizeType.LUNGO,
-    CupSizeType.HOT_WATER, CupSizeType.AMERICANO_COFFEE, CupSizeType.AMERICANO_WATER
-]
-APPLICABLE_CUP_SIZES[MachineType.VTP2] = [
-    CupSizeType.ESPRESSO, CupSizeType.LUNGO, CupSizeType.HOT_WATER_VTP2,
-    CupSizeType.AMERICANO_COFFEE, CupSizeType.AMERICANO_WATER,
-    CupSizeType.AMERICANO_XL_COFFEE, CupSizeType.AMERICANO_XL_WATER
-]
-APPLICABLE_CUP_SIZES[MachineType.BLUE] = [
-    CupSizeType.RISTRETTO, CupSizeType.ESPRESSO, CupSizeType.LUNGO
-]
-
-APPLICABLE_BREW = defaultdict(list)
-APPLICABLE_BREW[MachineType.EXPERT] = [
-    BrewType.RISTRETTO, BrewType.ESPRESSO, BrewType.LUNGO,
-    BrewType.HOT_WATER, BrewType.AMERICANO
-]
-APPLICABLE_BREW[MachineType.PRODIGIO] = [
-    BrewType.RISTRETTO, BrewType.ESPRESSO, BrewType.LUNGO,
-]
-APPLICABLE_BREW[MachineType.BLUE] = [
-    BrewType.RISTRETTO, BrewType.ESPRESSO, BrewType.LUNGO
-]
+try:
+    from enums import MachineType, BrewType, ErrorCode, Temprature
+except ImportError:
+    from .enums import MachineType, BrewType, ErrorCode, Temprature
 
 def get_machine_type_from_model_name(model_name):
     for machine_type in MachineType:
@@ -79,6 +19,8 @@ class CoffeeMachine:
         self.model = model
         self.name = name
         self.serial = serial
+        self.fw_version = None
+        self.hw_version = None
         self.configurations = self.default_configurations()
 
     def default_configurations(self):
@@ -139,11 +81,6 @@ class CoffeeMachineFactory:
             case _:
                 print(f"No specific machine found for model {model_name}. Using default.")
                 return CoffeeMachine(model_name)
-
-class ErrorCode(Enum):
-    TRAY_FULL = b'2403'
-    LID_NOT_CYCLED = b'2412'
-    WRONG_COMMAND = b'3603'
 
 def get_error_message(error_code):
     try:
@@ -218,7 +155,6 @@ class BaseDecode:
             try:
                 descaling_counter = int.from_bytes(val[6:9],byteorder='big')
             except:
-                #_LOGGER.debug("can't get descaling counter")
                 descaling_counter = 0
             return {"water_is_empty":BYTE0.bit0,
                     "descaling_needed":BYTE0.bit2,
@@ -235,9 +171,120 @@ class BaseDecode:
                     "descaling_counter":descaling_counter
                     }
         else:
-            #_LOGGER.debug("state_decoder else")
             res = val
         return {self.name:res}
+    
+def decode_machine_information(byte_array):
+    """
+    Decodes a bytearray into the MachineInformation properties.
+
+    Parameters:
+    byte_array (bytearray): A bytearray containing the machine information.
+
+    Returns:
+    dict: A dictionary containing the decoded properties.
+    """
+
+    def bytes_to_int(byte_pair):
+        """Converts a pair of bytes to an integer."""
+        return int.from_bytes(byte_pair, byteorder='big')
+
+    def bytes_to_mac_address(byte_array):
+        """Converts a bytearray to a MAC address string."""
+        return ':'.join('{:02x}'.format(byte) for byte in byte_array)
+
+    # Extract bytes for each property
+    hardware_version_bytes = byte_array[0:2]
+    bootloader_version_bytes = byte_array[2:4]
+    main_firmware_version_bytes = byte_array[4:6]
+    connectivity_firmware_version_bytes = byte_array[6:8]
+    device_address_bytes = byte_array[8:]
+
+    # Decode each property
+    hardware_version = bytes_to_int(hardware_version_bytes)
+    bootloader_version = bytes_to_int(bootloader_version_bytes)
+    main_firmware_version = bytes_to_int(main_firmware_version_bytes)
+    connectivity_firmware_version = bytes_to_int(connectivity_firmware_version_bytes)
+    device_address = bytes_to_mac_address(device_address_bytes)
+
+    # Returning the decoded properties in a dictionary
+    return {
+        "Hardware Version": VersionInformation(hardware_version).format_standard_version(),
+        "Bootloader Version": VersionInformation(bootloader_version).format_standard_version(),
+        "Main Firmware Version": VersionInformation(main_firmware_version).format_standard_version(),
+        "Connectivity Firmware Version": ConnectivityFirmwareVersion(connectivity_firmware_version).format_standard_version(),
+        "Device Address": device_address
+    }
+
+def decode_pairing_key_state(byte_buffer):
+    """
+    Decodes the pairing key state from a given byte buffer.
+
+    Parameters:
+    byte_buffer (bytearray): A bytearray containing the pairing key state.
+
+    Returns:
+    str: The decoded pairing key state as a string.
+    """
+    pairing_key_state_index = 0
+    pairing_key_state_byte = byte_buffer[pairing_key_state_index]
+
+    if pairing_key_state_byte in [0, 1]:
+        return "ABSENT"
+    elif pairing_key_state_byte == 2:
+        return "PRESENT"
+    elif pairing_key_state_byte == 3:
+        return "UNDEFINED"
+    else:
+        raise ValueError(f"Undefined PairingKeyState: {pairing_key_state_byte}")
+    
+class VersionInformation:
+    MAJOR_VERSION_MULTIPLIER = 100
+
+    def __init__(self, version):
+        self.version = version
+
+    def get_major_version(self):
+        return self.version // self.MAJOR_VERSION_MULTIPLIER
+
+    def get_minor_version(self):
+        return self.version % self.MAJOR_VERSION_MULTIPLIER
+
+    def is_available(self):
+        return self.version > 0
+
+    def format_standard_version(self):
+        if not self.is_available():
+            return None
+        return "{}.{}".format(self.get_major_version(), self.get_minor_version())
+
+class ConnectivityFirmwareVersion:
+    MAJOR_VERSION_MULTIPLIER = 10000
+    MINOR_VERSION_MULTIPLIER = 100
+
+    def __init__(self, version):
+        self.version = version
+
+    def get_build_version(self):
+        return self.version % self.MINOR_VERSION_MULTIPLIER
+
+    def get_major_version(self):
+        return self.version // self.MAJOR_VERSION_MULTIPLIER
+
+    def get_minor_version(self):
+        return (self.version % self.MAJOR_VERSION_MULTIPLIER) // self.MINOR_VERSION_MULTIPLIER
+
+    def is_available(self):
+        return self.version > 0
+
+    def format_standard_version(self):
+        if not self.is_available():
+            return None
+        return "{}.{}.{}".format(
+            self.get_major_version(),
+            self.get_minor_version(),
+            self.get_build_version()
+        )
 
 
 

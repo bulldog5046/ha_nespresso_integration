@@ -2,10 +2,10 @@
   "config": {
     "step": {
       "user": {
+        "description": "Please choose your device from the list below to start the pairing process. Ensure that your device is in factory reset mode and ready to pair with a new device. Alternatively, you can enter an existing authentication key if you have one.",
         "data": {
-          "host": "[%key:common::config_flow::data::host%]",
-          "username": "[%key:common::config_flow::data::username%]",
-          "password": "[%key:common::config_flow::data::password%]"
+          "device": "[%key:common::config_flow::data::device%]",
+          "token": "[%key:common::config_flow::data::access_token%]"
         }
       },
       "bluetooth_confirm": {

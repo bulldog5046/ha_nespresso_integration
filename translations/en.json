@@ -17,10 +17,10 @@
             },
             "user": {
                 "data": {
-                    "host": "Host",
-                    "password": "Password",
-                    "username": "Username"
-                }
+                    "device": "Device",
+                    "token": "Access token"
+                },
+                "description": "Please choose your device from the list below to start the pairing process. Ensure that your device is in factory reset mode and ready to pair with a new device. Alternatively, you can enter an existing authentication key if you have one."
             }
         }
     }
