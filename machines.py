@@ -1,68 +1,8 @@
-from enum import Enum, auto
-from collections import defaultdict
 import ctypes, binascii
-
-class MachineType(Enum):
-    EXPERT = auto()
-    VTP2 = auto()
-    BLUE = auto()
-    PRODIGIO = auto()
-
-class BrewType(Enum):
-    RISTRETTO = '00'
-    ESPRESSO = '01'
-    LUNGO = '02'
-    HOT_WATER = '04'
-    AMERICANO = '05'
-
-    def is_brew_applicable_for_machine(brew, machine_type: MachineType) -> bool:
-        return brew in APPLICABLE_BREW[machine_type]
-
-class Temprature(Enum):
-    LOW = '01'
-    MEDIUM = '00'
-    HIGH = '02'
-
-class CupSizeType(Enum):
-    RISTRETTO = auto()
-    ESPRESSO = auto()
-    LUNGO = auto()
-    AMERICANO_COFFEE = auto()
-    AMERICANO_WATER = auto()
-    AMERICANO_XL_COFFEE = auto()
-    AMERICANO_XL_WATER = auto()
-    HOT_WATER = auto()
-    HOT_WATER_VTP2 = auto()
-
-    def is_cup_size_applicable_for_machine(cup_size, machine_type: MachineType) -> bool:
-        return cup_size in APPLICABLE_CUP_SIZES[machine_type]
-
-
-APPLICABLE_CUP_SIZES = defaultdict(list)
-APPLICABLE_CUP_SIZES[MachineType.EXPERT] = [
-    CupSizeType.RISTRETTO, CupSizeType.ESPRESSO, CupSizeType.LUNGO,
-    CupSizeType.HOT_WATER, CupSizeType.AMERICANO_COFFEE, CupSizeType.AMERICANO_WATER
-]
-APPLICABLE_CUP_SIZES[MachineType.VTP2] = [
-    CupSizeType.ESPRESSO, CupSizeType.LUNGO, CupSizeType.HOT_WATER_VTP2,
-    CupSizeType.AMERICANO_COFFEE, CupSizeType.AMERICANO_WATER,
-    CupSizeType.AMERICANO_XL_COFFEE, CupSizeType.AMERICANO_XL_WATER
-]
-APPLICABLE_CUP_SIZES[MachineType.BLUE] = [
-    CupSizeType.RISTRETTO, CupSizeType.ESPRESSO, CupSizeType.LUNGO
-]
-
-APPLICABLE_BREW = defaultdict(list)
-APPLICABLE_BREW[MachineType.EXPERT] = [
-    BrewType.RISTRETTO, BrewType.ESPRESSO, BrewType.LUNGO,
-    BrewType.HOT_WATER, BrewType.AMERICANO
-]
-APPLICABLE_BREW[MachineType.PRODIGIO] = [
-    BrewType.RISTRETTO, BrewType.ESPRESSO, BrewType.LUNGO,
-]
-APPLICABLE_BREW[MachineType.BLUE] = [
-    BrewType.RISTRETTO, BrewType.ESPRESSO, BrewType.LUNGO
-]
+try:
+    from enums import MachineType, BrewType, ErrorCode, Temprature
+except ImportError:
+    from .enums import MachineType, BrewType, ErrorCode, Temprature
 
 def get_machine_type_from_model_name(model_name):
     for machine_type in MachineType:
@@ -142,11 +82,6 @@ class CoffeeMachineFactory:
                 print(f"No specific machine found for model {model_name}. Using default.")
                 return CoffeeMachine(model_name)
 
-class ErrorCode(Enum):
-    TRAY_FULL = b'2403'
-    LID_NOT_CYCLED = b'2412'
-    WRONG_COMMAND = b'3603'
-
 def get_error_message(error_code):
     try:
         return ErrorCode(error_code).name.replace('_', ' ').title()
@@ -188,14 +123,6 @@ class BaseDecode:
             res = val != bytearray(b'\x00')
         elif self.format_type == "water_hardness":
             res = int.from_bytes(val[2:3],byteorder='big')
-        elif self.format_type == "device_info":
-            return {
-                "hw_version": int.from_bytes(val[0:2],byteorder='big'),
-                "bootloader_version": int.from_bytes(val[2:4],byteorder='big'),
-                "main_firmware_version": int.from_bytes(val[4:6],byteorder='big'),
-                "connectivity_firmware_version": int.from_bytes(val[6:8],byteorder='big'),
-                "device_address": ':'.join('{:02x}'.format(byte) for byte in val[8:])
-            }
         elif self.format_type == "slider":
             res = binascii.hexlify(val)
             if (res) == b'00':
@@ -228,7 +155,6 @@ class BaseDecode:
             try:
                 descaling_counter = int.from_bytes(val[6:9],byteorder='big')
             except:
-                #_LOGGER.debug("can't get descaling counter")
                 descaling_counter = 0
             return {"water_is_empty":BYTE0.bit0,
                     "descaling_needed":BYTE0.bit2,
@@ -245,7 +171,6 @@ class BaseDecode:
                     "descaling_counter":descaling_counter
                     }
         else:
-            #_LOGGER.debug("state_decoder else")
             res = val
         return {self.name:res}
     
@@ -301,12 +226,9 @@ def decode_pairing_key_state(byte_buffer):
     Returns:
     str: The decoded pairing key state as a string.
     """
-
-    # Assuming the pairing key state is at a specific index, for example, index 0
     pairing_key_state_index = 0
     pairing_key_state_byte = byte_buffer[pairing_key_state_index]
 
-    # Mapping the byte value to the pairing key state
     if pairing_key_state_byte in [0, 1]:
         return "ABSENT"
     elif pairing_key_state_byte == 2:

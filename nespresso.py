@@ -317,7 +317,7 @@ class NespressoClient():
         response (bool): Default: False. Setup CMDRESP notification handler and await response.
 
         Returns:
-        Response string or True if no response if expected.
+        Response string or True if no response if expected. False if no response was received.
         """
         try:
             if response:
