@@ -4,14 +4,16 @@ from bleak import BleakScanner, BleakClient, BLEDevice
 from bleak_retry_connector import establish_connection
 try:
     from .machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name, decode_machine_information
+    from . import commandResponse, machineState, errorInformation
 except ImportError:
     from machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name, decode_machine_information, decode_pairing_key_state
+    import commandResponse, machineState, errorInformation
 from datetime import datetime, timedelta
 import binascii
 import uuid
 from collections import namedtuple
 import logging
-import commandResponse, machineState, errorInformation
+
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,7 +65,7 @@ class NespressoClient():
         self.data_update_interval = scan_interval
         self.data_update_lock = asyncio.Lock()
         self.data_last_updated: datetime | None = None
-        self.brew_response = None
+        self.command_response = None
         self.state_response = None
         self.isOnboard = None
         self.machine: MachineType | None = None
@@ -206,7 +208,7 @@ class NespressoClient():
             self.machine = CoffeeMachineFactory.get_coffee_machine(device_name, serial)
             return self.machine
         except Exception as e:
-            print(f'Can\'t init model: {e}')
+            _LOGGER.error(f'Can\'t init model: {e}')
             return None
 
     async def auth(self, client: BleakClient):
@@ -215,17 +217,15 @@ class NespressoClient():
     async def onboard(self, client: BleakClient):
         try:
             # Write the txLevel to LOW
-            txLevelResponse = await client.write_gatt_char(CHAR_UUID_PAIR, bytearray([1]), response=True)
-            print(txLevelResponse)
+            await client.write_gatt_char(CHAR_UUID_PAIR, bytearray([1]), response=True)
             # Write the auth code
-            authCodeResponse = await client.write_gatt_char(CHAR_UUID_AUTH, binascii.unhexlify(self.auth_code), response=True)
-            print(authCodeResponse)
+            await client.write_gatt_char(CHAR_UUID_AUTH, binascii.unhexlify(self.auth_code), response=True)
         except Exception as e:
             if e.dbus_error == 'org.bluez.Error.NotPermitted':
                 _LOGGER.error('Onboarding not permitted. Already paired?')
 
     def notification_handler(self, sender, data):
-        self.brew_response = commandResponse.from_byte_buffer(data).value
+        self.command_response = commandResponse.from_byte_buffer(data).value # New
 
     def state_notification_handler(self, sender, data):
         self.state_response = data
@@ -242,7 +242,6 @@ class NespressoClient():
             _LOGGER.error(f'{brew.name} is not valid for {self.devices[self._conn.address].model.name}')
             return
         try:
-            self.brew_response = None
             command = "03050704" # Recipes
             command += "00000000" # Padding?
 
@@ -252,22 +251,11 @@ class NespressoClient():
             # Brew Selection
             command += brew.value
 
-            # Subscribe to Brew notifications
-            await self._conn.start_notify(CHAR_UUID_CMDRESP, self.notification_handler)
+            brew_response = await self._send_command(CHAR_UUID_BREW, binascii.unhexlify(command), response=True)
 
-            await self._conn.write_gatt_char(CHAR_UUID_BREW, binascii.unhexlify(command), response=True)
-
-            for _ in range(10):  # Wait up to 10 seconds
-                if self.brew_response is not None:
-                    break
-                await asyncio.sleep(1)  # Wait for 1 second before checking again
-
-            # Unsubscribe from the Brew notifications
-            await self._conn.stop_notify(CHAR_UUID_CMDRESP)
-
-            return self.brew_response
+            return brew_response
         except Exception as e:
-            print(f'Error Brewing: {e}')
+            _LOGGER.error(f'Error Brewing: {e}')
 
     async def brew_custom(self, 
                           coffee_ml: int = 100, 
@@ -288,27 +276,18 @@ class NespressoClient():
         brew_command += temp.value if self.machine.configurations['temprature_control'] else Temprature.MEDIUM.value
         brew_command += "07" # Custom Recipe
 
-        # Subscribe to Brew notifications
-        await self._conn.start_notify(CHAR_UUID_CMDRESP, 
-                                      self.notification_handler)
+        prep_response = await self._send_command(CHAR_UUID_BREW, 
+                                binascii.unhexlify(prep_command), 
+                                response=True)
+        if prep_response != 'Done':
+            _LOGGER.error(f'Preparing custom brew command failed: {prep_response}')
+            return prep_response
 
-        await self._conn.write_gatt_char(CHAR_UUID_BREW, 
-                                         binascii.unhexlify(prep_command), 
-                                         response=True)
+        brew_response = await self._send_command(CHAR_UUID_BREW, 
+                                binascii.unhexlify(brew_command), 
+                                response=True)
 
-        await self._conn.write_gatt_char(CHAR_UUID_BREW, 
-                                         binascii.unhexlify(brew_command), 
-                                         response=True)
-
-        for _ in range(10):  # Wait up to 10 seconds
-            if self.brew_response is not None:
-                break
-            await asyncio.sleep(1)  # Wait for 1 second before checking again
-
-        # Unsubscribe from the Brew notifications
-        await self._conn.stop_notify(CHAR_UUID_CMDRESP)
-
-        return self.brew_response
+        return brew_response
     
     async def update_caps_counter(self, caps: int):
         if not caps > 0 and not caps < 1000:
@@ -323,6 +302,59 @@ class NespressoClient():
             response=True)
 
         return response
+    
+    async def _send_command(self,  
+                            characteristic: uuid,
+                            command: bytes, 
+                            response: bool = False) -> str | bool:
+        """
+        Attempts to send given command and return the response string or False
+        if no response is expected.
+
+        Parameters:
+        characteristic (uuid): Characteristic UUID to write command to
+        command (bytes): Bytes to send as a list.
+        response (bool): Default: False. Setup CMDRESP notification handler and await response.
+
+        Returns:
+        Response string or True if no response if expected.
+        """
+        try:
+            if response:
+                self.command_response = None
+
+                await self._conn.start_notify(CHAR_UUID_CMDRESP, 
+                                            self.notification_handler)
+
+                for i in range(3):
+                    _LOGGER.debug(f'Attempt {i} to send {command} to {self.machine.name}')
+                    await self._conn.write_gatt_char(characteristic, 
+                                                    command, 
+                                                    response=True)
+                    for _ in range(5):
+                        if self.command_response is not None:
+                            break
+                        await asyncio.sleep(1) 
+                
+                if self.command_response is None:
+                    _LOGGER.error(f'No response received from {self.machine.name} after 3 attempts')
+                    await self._conn.stop_notify(CHAR_UUID_CMDRESP)
+                    return False
+
+                await self._conn.stop_notify(CHAR_UUID_CMDRESP)
+            else:
+                await self._conn.write_gatt_char(characteristic, 
+                                                command)
+                return True
+        except Exception as e:
+            _LOGGER.error(f'Failed to send command to {self.machine.name}: {e}')
+            if response:
+                await self._conn.stop_notify(CHAR_UUID_CMDRESP)
+            return False
+
+        _LOGGER.debug(f'Received command respose: {self.command_response} from {self.machine.name}')
+        return self.command_response
+
 
 
 async def main():
@@ -349,9 +381,12 @@ async def main():
                 pairingKeyState = await client.read_gatt_char(
                     CHAR_UUID_ONBOARD_STATUS)
 
-                print(
-                    decode_machine_information(machineinfo)
-                    )
+                
+                minfo = decode_machine_information(machineinfo)
+
+                for key, value in minfo.items():
+                    print(f'{key}: {value}')
+                    
                 print('Paring key state: ',
                     decode_pairing_key_state(pairingKeyState)
                 )
@@ -376,9 +411,17 @@ async def main():
 
                 print(errorInformation.to_error_information(error))
 
-                #cmd_response = await nespresso_client.brew_predefined()
+                # Test new send command function
+                command = "03050704" # Recipes
+                command += "00000000" # Padding?
+                command += Temprature.MEDIUM.value
+                command += BrewType.ESPRESSO.value
 
-                #print(f'Cmd response: {cmd_response}')
+                #response = await nespresso_client._send_command(CHAR_UUID_BREW, binascii.unhexlify(command), response=True)
+                response = await nespresso_client.brew_custom()
+                print(f'Cmd response: {response}')
+
+                ## END Testing
 
                 await client.disconnect()
                 exit()
