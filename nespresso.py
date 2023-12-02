@@ -225,7 +225,7 @@ class NespressoClient():
                 _LOGGER.error('Onboarding not permitted. Already paired?')
 
     def notification_handler(self, sender, data):
-        self.command_response = commandResponse.from_byte_buffer(data).value # New
+        self.command_response = commandResponse.from_byte_buffer(data).value
 
     def state_notification_handler(self, sender, data):
         self.state_response = data
@@ -296,10 +296,10 @@ class NespressoClient():
         
         caps = format(caps, '04x') if caps else None
         
-        response = await self._conn.write_gatt_char(
-            '06aa3a15-f22a-11e3-9daa-0002a5d5c51b', 
+        response = await self._send_command(
+            CHAR_UUID_NBCAPS, 
             binascii.unhexlify(caps), 
-            response=True)
+            response=False)
 
         return response
     
@@ -412,13 +412,7 @@ async def main():
                 print(errorInformation.to_error_information(error))
 
                 # Test new send command function
-                command = "03050704" # Recipes
-                command += "00000000" # Padding?
-                command += Temprature.MEDIUM.value
-                command += BrewType.ESPRESSO.value
-
-                #response = await nespresso_client._send_command(CHAR_UUID_BREW, binascii.unhexlify(command), response=True)
-                response = await nespresso_client.brew_custom()
+                response = await nespresso_client.update_caps_counter(100)
                 print(f'Cmd response: {response}')
 
                 ## END Testing
