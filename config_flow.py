@@ -128,8 +128,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 device = NespressoClient(mac=discovered.address)
-                if user_input[CONF_TOKEN]:
-                    device.auth_code = user_input[CONF_TOKEN]
+                if user_input.get(CONF_TOKEN):
+                    device.auth_code = user_input.get(CONF_TOKEN)
                 ble_device = async_ble_device_from_address(self.hass, discovered.address)
                 await device.connect(ble_device)
                 await device.load_model()
