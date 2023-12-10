@@ -3,11 +3,13 @@ import pprint
 from bleak import BleakScanner, BleakClient, BLEDevice
 from bleak_retry_connector import establish_connection
 try:
-    from .machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name, decode_machine_information
+    from .machines import CoffeeMachineFactory, MachineType, BrewType, Temprature, Ingredient, decode_machine_information, get_machine_type_from_model_name, decode_pairing_key_state
     from . import commandResponse, machineState, errorInformation
+    from .machineStatus import BaseDecode
 except ImportError:
-    from machines import CoffeeMachineFactory, BaseDecode, MachineType, BrewType, Temprature, get_machine_type_from_model_name, decode_machine_information, decode_pairing_key_state
+    from machines import CoffeeMachineFactory, MachineType, BrewType, Temprature, Ingredient, decode_machine_information, get_machine_type_from_model_name, decode_pairing_key_state
     import commandResponse, machineState, errorInformation
+    from machineStatus import BaseDecode
 from datetime import datetime, timedelta
 import binascii
 import uuid
@@ -42,13 +44,11 @@ device_info_characteristics = [manufacturer_characteristics,
 sensors_characteristics = [CHAR_UUID_STATE, CHAR_UUID_NBCAPS,
                            CHAR_UUID_SLIDER, CHAR_UUID_WATER_HARDNESS]
 
-sensor_decoders = {str(CHAR_UUID_STATE):BaseDecode(name="state", format_type='state'),
-                   str(CHAR_UUID_NBCAPS):BaseDecode(name="caps_number", format_type='caps_number'),
-                   str(CHAR_UUID_SLIDER):BaseDecode(name="slider", format_type='slider'),
-                   str(CHAR_UUID_WATER_HARDNESS):BaseDecode(name="water_hardness", format_type='water_hardness'),
-                   str(CHAR_UUID_CMDRESP):BaseDecode(name="command_response", format_type='command_response'),
-                   str(CHAR_UUID_ONBOARD_STATUS):BaseDecode(name="pairing_key", format_type="paired_status"),
-                   str(CHAR_UUID_INFO):BaseDecode(name="device_info", format_type="device_info")
+sensor_decoders = {CHAR_UUID_STATE:BaseDecode(name="state", format_type='state'),
+                   CHAR_UUID_NBCAPS:BaseDecode(name="caps_number", format_type='caps_number'),
+                   CHAR_UUID_SLIDER:BaseDecode(name="slider", format_type='slider'),
+                   CHAR_UUID_WATER_HARDNESS:BaseDecode(name="water_hardness", format_type='water_hardness'),
+                   CHAR_UUID_INFO:BaseDecode(name="device_state", format_type="device_state")
                    }
 
 class NespressoClient():
@@ -242,16 +242,16 @@ class NespressoClient():
             _LOGGER.error(f'{brew.name} is not valid for {self.devices[self._conn.address].model.name}')
             return
         try:
-            command = "03050704" # Recipes
-            command += "00000000" # Padding?
+            buffer = bytearray(10)
+            buffer[0] = 3
+            buffer[1] = 5
+            buffer[2] = 7
+            buffer[3] = 4
 
-            # Temprature Selection
-            command += temp.value if self.devices[self._conn.address].configurations['temprature_control'] else Temprature.MEDIUM.value
+            buffer[8] = temp.value if self.devices[self._conn.address].configurations['temprature_control'] else Temprature.MEDIUM.value
+            buffer[9] = brew.value
 
-            # Brew Selection
-            command += brew.value
-
-            brew_response = await self._send_command(CHAR_UUID_BREW, binascii.unhexlify(command), response=True)
+            brew_response = await self._send_command(CHAR_UUID_BREW, buffer, response=True)
 
             return brew_response
         except Exception as e:
@@ -265,26 +265,35 @@ class NespressoClient():
             _LOGGER.error(f'Custom Recepies are not supported for {self.machine}')
             return False
 
-        prep_command = "0110080000" # custom recipes
-        prep_command += "01" # Ingredient Coffee
-        prep_command += f"{coffee_ml:04x}" # Qty in ml
-        prep_command += "02" # Ingredient Water
-        prep_command += f"{water_ml:04x}" # Qty in ml
+        buffer = bytearray(10)
+        buffer[0] = 1
+        buffer[1] = 16
+        buffer[2] = 8
 
-        brew_command = "03050704" # Brew command
-        brew_command += "00000000" # Padding?
-        brew_command += temp.value if self.machine.configurations['temprature_control'] else Temprature.MEDIUM.value
-        brew_command += "07" # Custom Recipe
+        buffer[5] = Ingredient.COFFEE.value
+        buffer[6:8] = coffee_ml.to_bytes(2)
+
+        buffer[8] = Ingredient.WATER.value
+        buffer[9:11] = water_ml.to_bytes(2)
 
         prep_response = await self._send_command(CHAR_UUID_BREW, 
-                                binascii.unhexlify(prep_command), 
+                                buffer, 
                                 response=True)
         if prep_response != 'Done':
             _LOGGER.error(f'Preparing custom brew command failed: {prep_response}')
             return prep_response
 
+        buffer = bytearray(10)
+        buffer[0] = 3
+        buffer[1] = 5
+        buffer[2] = 7
+        buffer[3] = 4
+
+        buffer[8] = temp.value if self.machine.configurations['temprature_control'] else Temprature.MEDIUM.value
+        buffer[9] = BrewType.CUSTOM.value
+
         brew_response = await self._send_command(CHAR_UUID_BREW, 
-                                binascii.unhexlify(brew_command), 
+                                buffer, 
                                 response=True)
 
         return brew_response
@@ -294,11 +303,29 @@ class NespressoClient():
             _LOGGER.error(f'Value of caps must be between 1 and 1000')
             return
         
-        caps = format(caps, '04x') if caps else None
+        buffer = bytearray(2)
+        buffer = caps.to_bytes(2)
         
         response = await self._send_command(
             CHAR_UUID_NBCAPS, 
-            binascii.unhexlify(caps), 
+            buffer, 
+            response=False)
+
+        return response
+    
+    async def update_water_hardness(self, level: int):
+        if not level >= 0 and not level < 4:
+            _LOGGER.error(f'Value of water hardness must be between 0 and 4')
+            return
+        
+        buffer = bytearray(3)
+        buffer[0] = 0xFF
+        buffer[1] = 0xFF
+        buffer[2] = level
+        
+        response = await self._send_command(
+            CHAR_UUID_WATER_HARDNESS, 
+            buffer, 
             response=False)
 
         return response
@@ -317,7 +344,7 @@ class NespressoClient():
         response (bool): Default: False. Setup CMDRESP notification handler and await response.
 
         Returns:
-        Response string or True if no response if expected. False if no response was received.
+        Response string or True if response is expected. False if no response was received.
         """
         try:
             if response:
@@ -358,11 +385,14 @@ class NespressoClient():
 
 
 async def main():
-    nespresso_client = NespressoClient(180, '888cd4d9403865e1', 
-                                       'D1:E1:03:7C:4A:9D')
+    # Test Machine
+    nespresso_client = NespressoClient(180, 'e37d7534af63435d', 'DF:81:37:AD:93:83')
+    
+    # Live Machine
+    #nespresso_client = NespressoClient(180, '888cd4d9403865e1', 'D1:E1:03:7C:4A:9D')
 
     for mac in nespresso_client.nespresso_devices:
-        async with BleakClient('D1:E1:03:7C:4A:9D') as client:
+        async with BleakClient(nespresso_client.address) as client: 
             print(f"Connected: {client.is_connected}")
             try:
                 paired = await client.pair(protection_level=2)
@@ -373,10 +403,11 @@ async def main():
                     CHAR_UUID_ONBOARD_STATUS) != bytearray(b'\x00')
                 print(f'Onboarded: {onboarded}')
 
+                #await nespresso_client.onboard(client)
+
                 await nespresso_client.auth(client)
 
-                machineinfo = await client.read_gatt_char(
-                    '06aa3a21-f22a-11e3-9daa-0002a5d5c51b')
+                machineinfo = await client.read_gatt_char(CHAR_UUID_INFO)
 
                 pairingKeyState = await client.read_gatt_char(
                     CHAR_UUID_ONBOARD_STATUS)
@@ -401,26 +432,12 @@ async def main():
 
                 await nespresso_client.get_info()
 
-                # get error
-                await client.write_gatt_char(
-                    '06aa3a13-f22a-11e3-9daa-0002a5d5c51b', 
-                    binascii.unhexlify('01'))
-                
-                error = await client.read_gatt_char(
-                    '06aa3a23-f22a-11e3-9daa-0002a5d5c51b')
-
-                print(errorInformation.to_error_information(error))
-
                 # Test new send command function
-                response = await nespresso_client.update_caps_counter(100)
-                print(f'Cmd response: {response}')
-
+                #response = await nespresso_client.brew_custom(25, 50)
+                #await nespresso_client.update_caps_counter(101)
+                #print(f'Cmd response: {response}')
                 ## END Testing
 
-                await client.disconnect()
-                exit()
-
-                await nespresso_client.update_caps_counter(100)
 
                 sensor_characteristics =  []
                 for uuid in sensors_characteristics:

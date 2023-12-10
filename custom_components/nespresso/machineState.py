@@ -42,7 +42,7 @@ def from_byte_array(byte_array):
     capsule_stock_event_counter = select_bits(byte_array, 30, 2)
     blocked_machine_event_counter = select_bits(byte_array, 32, 2)
     #slider_open = not get_boolean(byte_array, 46) # Seems incorrect. Reversed from decompiled code.
-    obstacle_detected = get_boolean(byte_array, 47)
+    #obstacle_detected = get_boolean(byte_array, 47) # Seems incorrect. Reversed from decompiled code.
 
     return {
         'MachineState': machine_state.name,
@@ -53,7 +53,7 @@ def from_byte_array(byte_array):
         'CapsuleStockEventCounter': capsule_stock_event_counter,
         'BlockedMachineEventCounter': blocked_machine_event_counter,
         #'SliderOpen': slider_open,
-        'ObstacleDetected': obstacle_detected
+        #'ObstacleDetected': obstacle_detected
     }
 
 if __name__ == '__main__':
