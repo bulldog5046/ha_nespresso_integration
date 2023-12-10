@@ -80,6 +80,7 @@ DEVICE_SENSOR_SPECIFICS = { "state":Sensor(None, None, None, None),
                             "water_hardness":Sensor(None, None, None, 'mdi:water-percent'),
                             "slider":Sensor(None, None, DEVICE_CLASS_DOOR, 'mdi:gate-and'),
                             "caps_number": Sensor(CAPS_UNITS, None, DEVICE_CLASS_CAPS, 'mdi:counter'),
+                            "water_fresh": Sensor(None, None, None, None)
                            }
 
 
@@ -224,7 +225,12 @@ class NespressoSensor(Entity):
     @property
     def name(self):
         """Return the name of the sensor."""
-        return self._name
+        return self.friendly_name
+    
+    @property
+    def friendly_name(self):
+        """Return the friendly name of the sensor"""
+        return' '.join(word.capitalize() for word in self._sensor_name.split('_'))
 
     @property
     def state(self):
@@ -274,7 +280,9 @@ class NespressoSensor(Entity):
                     await self.device.disconnect()
         value = self.device.sensordata[self._mac][self._sensor_name]
 
-        if self._sensor_specifics.unit_scale is None:
+        if type(value) is str:
+            self._state = ' '.join(word.capitalize() for word in value.split('_'))
+        elif self._sensor_specifics.unit_scale is None:
             self._state = value
         else:
             self._state = round(float(value * self._sensor_specifics.unit_scale), 2)

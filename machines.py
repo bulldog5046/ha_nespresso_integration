@@ -1,8 +1,7 @@
-import ctypes, binascii
 try:
-    from enums import MachineType, BrewType, ErrorCode, Temprature
+    from enums import MachineType, BrewType, ErrorCode, Temprature, Ingredient
 except ImportError:
-    from .enums import MachineType, BrewType, ErrorCode, Temprature
+    from .enums import MachineType, BrewType, ErrorCode, Temprature, Ingredient
 
 def get_machine_type_from_model_name(model_name):
     for machine_type in MachineType:
@@ -87,92 +86,6 @@ def get_error_message(error_code):
         return ErrorCode(error_code).name.replace('_', ' ').title()
     except ValueError:
         return f"Unknown Error({error_code})"
-
-c_uint8 = ctypes.c_uint8
-
-class Flags_bits( ctypes.LittleEndianStructure ):
-     _fields_ = [
-                 ("bit0",     c_uint8, 1 ),  # asByte & 1
-                 ("bit1",     c_uint8, 1 ),  # asByte & 2
-                 ("bit2",     c_uint8, 1 ),  # asByte & 4
-                 ("bit3",     c_uint8, 1 ),  # asByte & 8
-                 ("bit4",     c_uint8, 1 ),  # asByte & 16
-                 ("bit5",     c_uint8, 1 ),  # asByte & 32
-                 ("bit6",     c_uint8, 1 ),  # asByte & 64
-                 ("bit7",     c_uint8, 1 ),  # asByte & 128
-                ]
-
-class Flags( ctypes.Union ):
-     _anonymous_ = ("bit",)
-     _fields_ = [
-                 ("bit",    Flags_bits ),
-                 ("asByte", c_uint8    )
-                ]
-
-class BaseDecode:
-    def __init__(self, name, format_type):
-        self.name = name
-        self.format_type = format_type
-
-    def decode_data(self, raw_data):
-        #val = struct.unpack(self.format_type,raw_data)
-        val = raw_data
-        if self.format_type == "caps_number":
-            res = int.from_bytes(val,byteorder='big')
-        elif self.format_type == "pairing_status":
-            res = val != bytearray(b'\x00')
-        elif self.format_type == "water_hardness":
-            res = int.from_bytes(val[2:3],byteorder='big')
-        elif self.format_type == "slider":
-            res = binascii.hexlify(val)
-            if (res) == b'00':
-                res = 'open'
-                #res = 'on'
-            elif (res) == b'02':
-                res = 'closed'
-                #res = 'off'
-            else :
-                res = "N/A"
-        elif self.format_type == "command_response":
-            error = val[0] & 0x40
-            _0x = binascii.hexlify(val)
-            if not error:
-                return {self.name:'success'}
-            length = val[2]
-            return {self.name:get_error_message(_0x[6:6+length*2])}
-
-        elif self.format_type == "state":
-            BYTE0 = Flags()
-            BYTE1 = Flags()
-            BYTE2 = Flags()
-            BYTE3 = Flags()
-
-            BYTE0.asByte = val[0]
-            BYTE1.asByte = val[1]
-            # TODO error counter
-            BYTE2.asByte = val[2]
-            BYTE3.asByte = val[3]
-            try:
-                descaling_counter = int.from_bytes(val[6:9],byteorder='big')
-            except:
-                descaling_counter = 0
-            return {"water_is_empty":BYTE0.bit0,
-                    "descaling_needed":BYTE0.bit2,
-                    "capsule_mechanism_jammed":BYTE0.bit4,
-                    "always_1":BYTE0.bit6,
-                    "water_temp_low":BYTE1.bit0,
-                    "awake":BYTE1.bit1,
-                    "water_engadged":BYTE1.bit2,
-                    "sleeping":BYTE1.bit3,
-                    "tray_sensor_during_brewing":BYTE1.bit4,
-                    "tray_open_tray_sensor_full":BYTE1.bit6,
-                    "capsule_engaged":BYTE1.bit7,
-                    "Fault":BYTE3.bit5,
-                    "descaling_counter":descaling_counter
-                    }
-        else:
-            res = val
-        return {self.name:res}
     
 def decode_machine_information(byte_array):
     """
