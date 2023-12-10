@@ -303,11 +303,12 @@ class NespressoClient():
             _LOGGER.error(f'Value of caps must be between 1 and 1000')
             return
         
-        caps = format(caps, '04x') if caps else None
+        buffer = bytearray(2)
+        buffer = caps.to_bytes(2)
         
         response = await self._send_command(
             CHAR_UUID_NBCAPS, 
-            binascii.unhexlify(caps), 
+            buffer, 
             response=False)
 
         return response
@@ -406,8 +407,7 @@ async def main():
 
                 await nespresso_client.auth(client)
 
-                machineinfo = await client.read_gatt_char(
-                    '06aa3a21-f22a-11e3-9daa-0002a5d5c51b')
+                machineinfo = await client.read_gatt_char(CHAR_UUID_INFO)
 
                 pairingKeyState = await client.read_gatt_char(
                     CHAR_UUID_ONBOARD_STATUS)
@@ -433,11 +433,9 @@ async def main():
                 await nespresso_client.get_info()
 
                 # Test new send command function
-
-
-                response = await nespresso_client.brew_custom(25, 50)
-                print(f'Cmd response: {response}')
-
+                #response = await nespresso_client.brew_custom(25, 50)
+                #await nespresso_client.update_caps_counter(101)
+                #print(f'Cmd response: {response}')
                 ## END Testing
 
 
