@@ -65,6 +65,16 @@ class BlueMachine(CoffeeMachine):
         return {
             'placeholder': 1.0,
         }
+    
+class VenusMachine(CoffeeMachine):
+    def __init__(self, name: str, serial: str):
+        super().__init__(MachineType.PRODIGIO, name, serial)
+
+    def default_configurations(self):
+        # Default configurations for a generic coffee machine
+        return {
+            'placeholder': 1.0,
+        }
 
 class CoffeeMachineFactory:
     @staticmethod
@@ -77,6 +87,8 @@ class CoffeeMachineFactory:
                 return ExpertMachine(model_name, serial)
             case MachineType.PRODIGIO:
                 return ProdigoMachine(model_name, serial)
+            case MachineType.VENUS:
+                return VenusMachine(model_name, serial)
             case _:
                 print(f"No specific machine found for model {model_name}. Using default.")
                 return CoffeeMachine(model_name)
