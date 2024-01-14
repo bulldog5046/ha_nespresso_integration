@@ -1,7 +1,7 @@
 try:
-    from enums import MachineType, BrewType, ErrorCode, Temprature, Ingredient
+    from enums import MachineType, BrewType, ErrorCode, Temprature, Ingredient, MachineState, VenusMachineState
 except ImportError:
-    from .enums import MachineType, BrewType, ErrorCode, Temprature, Ingredient
+    from .enums import MachineType, BrewType, ErrorCode, Temprature, Ingredient, MachineState, VenusMachineState
 
 def get_machine_type_from_model_name(model_name):
     for machine_type in MachineType:
@@ -21,6 +21,7 @@ class CoffeeMachine:
         self.fw_version = None
         self.hw_version = None
         self.configurations = self.default_configurations()
+        self.state_enum = MachineState
 
     def default_configurations(self):
         # Default configurations for a generic coffee machine
@@ -69,7 +70,8 @@ class BlueMachine(CoffeeMachine):
 '''Vertuo Next'''
 class VenusMachine(CoffeeMachine):
     def __init__(self, name: str, serial: str):
-        super().__init__(MachineType.PRODIGIO, name, serial)
+        super().__init__(MachineType.VENUS, name, serial)
+        self.state_enum = VenusMachineState
 
     def default_configurations(self):
         # Default configurations for a generic coffee machine
@@ -80,7 +82,8 @@ class VenusMachine(CoffeeMachine):
 '''Vertuo Pop'''
 class Dv2Machine(CoffeeMachine):
     def __init__(self, name: str, serial: str):
-        super().__init__(MachineType.PRODIGIO, name, serial)
+        super().__init__(MachineType.DV2, name, serial)
+        self.state_enum = VenusMachineState
 
     def default_configurations(self):
         # Default configurations for a generic coffee machine
@@ -235,3 +238,5 @@ if __name__ == '__main__':
     print(BrewType.is_brew_applicable_for_machine(BrewType.AMERICANO, machine.model))
 
     print(machine.configurations['temprature_control'])
+
+    print(machine)
