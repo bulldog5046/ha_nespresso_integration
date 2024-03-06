@@ -1,0 +1,27 @@
+{
+    "config": {
+        "abort": {
+            "already_configured": "Enheten är redan konfigurerad",
+            "already_in_progress": "Konfigurationsflödet pågår",
+            "no_devices_found": "Inga enheter hittades i nätverket"
+        },
+        "error": {
+            "cannot_connect": "Misslyckades att ansluta",
+            "cannot_pair": "Kunde inte para enheten",
+            "invalid_auth": "Ogiltig autensiering",
+            "unknown": "Oväntat fel"
+        },
+        "step": {
+            "bluetooth_confirm": {
+                "description": "Vill du ansluta {name}?"
+            },
+            "user": {
+                "data": {
+                    "device": "Enhet",
+                    "token": "autentiseringstoken"
+                },
+                "description": "Välj din enhet från listan nedan för att starta anslutningsprocessen. Försäkra dig om att din enhet är i ett fabriksåterställt läge och redo att ansluta. Alternativt, kan du ange en exsisterande autensieringsnyckel om du har en."
+            }
+        }
+    }
+}
