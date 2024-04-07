@@ -1,11 +1,12 @@
 try:
-    from enums import WaterIsEmpty, DescalingNeeded, CapsuleMechanismJammed, SliderOpen, WaterIsFresh, WaterHardness, MachineState
+    from enums import WaterIsEmpty, DescalingNeeded, CapsuleMechanismJammed, SliderOpen, WaterIsFresh, WaterHardness, MachineState, VenusMachineState
 except ImportError:
-    from .enums import WaterIsEmpty, DescalingNeeded, CapsuleMechanismJammed, SliderOpen, WaterIsFresh, WaterHardness, MachineState
+    from .enums import WaterIsEmpty, DescalingNeeded, CapsuleMechanismJammed, SliderOpen, WaterIsFresh, WaterHardness, MachineState, VenusMachineState
 
 class MachineStatus:
-    def __init__(self, raw_data):
+    def __init__(self, raw_data, state_enum):
         self.raw_data = raw_data
+        self.state_enum = state_enum
 
     def select_bits(self, start_bit, length):
         value = int.from_bytes(self.raw_data)
@@ -36,7 +37,7 @@ class MachineStatus:
             "descaling_needed": self.decode_descaling_needed().name,
             "capsule_mechanism_jammed": self.decode_capsule_mechanism_jammed().name,
             "water_fresh": self.decode_water_fresh().name,
-            "state": MachineState(self.select_bits(12, 4)).name,
+            "state": self.state_enum(self.select_bits(12, 4)).name,
             "descaling_counter": int.from_bytes(self.raw_data[6:9])
             
         }
@@ -46,9 +47,9 @@ class BaseDecode:
         self.name = name
         self.format_type = format_type
 
-    def decode_data(self, raw_data):
+    def decode_data(self, raw_data, state_enum = MachineState):
         if self.format_type == "state":
-            status_decoder = MachineStatus(raw_data)
+            status_decoder = MachineStatus(raw_data, state_enum)
             return status_decoder.decode()
         elif self.format_type == "caps_number":
             return {self.name: int.from_bytes(raw_data, byteorder='big')}
@@ -69,7 +70,7 @@ if __name__ == '__main__':
     slider_bytes = bytearray(b'\x00')
     water_hardness_bytes = bytearray(b'\x02\x1c\x04\x00')
     decoder = BaseDecode("state", "state")
-    decoded_data = decoder.decode_data(state_bytes)
+    decoded_data = decoder.decode_data(state_bytes, VenusMachineState)
     print(decoded_data)
 
     # "water_is_empty":BYTE0.bit0,

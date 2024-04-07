@@ -20,6 +20,30 @@ class MachineState(Enum):
     STAND_BY_DELAY_SETTINGS = 15
     UNKNOWN = 16
 
+class VenusMachineState(Enum):
+    FACTORY_RESET = 0
+    HEAT_UP = 1
+    READY = 2
+    DESCALING_READY = 3
+    BREWING = 4
+    CLEANING = 5
+    DESCALING = 6
+    STEAM_OUT = 7
+    ERROR = 8
+    POWER_SAVE = 9
+    OVER_HEAT = 10
+    DIAGNOSTIC_MODE = 11
+    STANDBY = 12
+    UPDATING = 13
+    RINSING = 14
+    UNKNOWN = 16
+    CAPSULE_READING = 17
+    DESCALC_SEQUENCE_DECODING = 18
+    TANK_EMPTY = 19
+    DESCALING_PAUSED = 20
+    INITIALIZATION = 21
+    RINSING_READY = 22
+
 class WaterIsEmpty(Enum):
     NOT_EMPTY = 0
     EMPTY = 1
@@ -52,6 +76,9 @@ class MachineType(Enum):
     VTP2 = auto()
     BLUE = auto()
     PRODIGIO = auto()
+    VENUS = auto()
+    DV2 = auto()
+    DV6 = auto()
 
 class BrewType(Enum):
     RISTRETTO = 0

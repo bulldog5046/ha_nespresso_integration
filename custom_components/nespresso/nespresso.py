@@ -3,11 +3,11 @@ import pprint
 from bleak import BleakScanner, BleakClient, BLEDevice
 from bleak_retry_connector import establish_connection
 try:
-    from .machines import CoffeeMachineFactory, MachineType, BrewType, Temprature, Ingredient, decode_machine_information, get_machine_type_from_model_name, decode_pairing_key_state
+    from .machines import CoffeeMachineFactory, CoffeeMachine, MachineType, BrewType, Temprature, Ingredient, decode_machine_information, get_machine_type_from_model_name, decode_pairing_key_state
     from . import commandResponse, machineState, errorInformation
     from .machineStatus import BaseDecode
 except ImportError:
-    from machines import CoffeeMachineFactory, MachineType, BrewType, Temprature, Ingredient, decode_machine_information, get_machine_type_from_model_name, decode_pairing_key_state
+    from machines import CoffeeMachineFactory, CoffeeMachine, MachineType, BrewType, Temprature, Ingredient, decode_machine_information, get_machine_type_from_model_name, decode_pairing_key_state
     import commandResponse, machineState, errorInformation
     from machineStatus import BaseDecode
 from datetime import datetime, timedelta
@@ -68,7 +68,7 @@ class NespressoClient():
         self.command_response = None
         self.state_response = None
         self.isOnboard = None
-        self.machine: MachineType | None = None
+        self.machine: CoffeeMachine | None = None
         self.address = mac
         self._conn: None | BleakClient = None
 
@@ -177,7 +177,10 @@ class NespressoClient():
                     try:
                         data = await self._conn.read_gatt_char(characteristic)
                         if characteristic in sensor_decoders:
-                            sensor_data = sensor_decoders[characteristic].decode_data(data)
+                            if characteristic == CHAR_UUID_STATE:
+                                sensor_data = sensor_decoders[characteristic].decode_data(data, self.machine.state_enum)
+                            else:
+                                sensor_data = sensor_decoders[characteristic].decode_data(data)
                             if self.sensordata.get(mac) is None:
                                 self.sensordata[mac] = sensor_data
                             else:
@@ -221,8 +224,7 @@ class NespressoClient():
             # Write the auth code
             await client.write_gatt_char(CHAR_UUID_AUTH, binascii.unhexlify(self.auth_code), response=True)
         except Exception as e:
-            if e.dbus_error == 'org.bluez.Error.NotPermitted':
-                _LOGGER.error('Onboarding not permitted. Already paired?')
+            _LOGGER.error('Onboarding not permitted. Already paired?')
 
     def notification_handler(self, sender, data):
         self.command_response = commandResponse.from_byte_buffer(data).value

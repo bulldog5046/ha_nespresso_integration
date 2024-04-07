@@ -1,7 +1,7 @@
 try:
-    from enums import MachineType, BrewType, ErrorCode, Temprature, Ingredient
+    from enums import MachineType, BrewType, ErrorCode, Temprature, Ingredient, MachineState, VenusMachineState
 except ImportError:
-    from .enums import MachineType, BrewType, ErrorCode, Temprature, Ingredient
+    from .enums import MachineType, BrewType, ErrorCode, Temprature, Ingredient, MachineState, VenusMachineState
 
 def get_machine_type_from_model_name(model_name):
     for machine_type in MachineType:
@@ -21,6 +21,7 @@ class CoffeeMachine:
         self.fw_version = None
         self.hw_version = None
         self.configurations = self.default_configurations()
+        self.state_enum = MachineState
 
     def default_configurations(self):
         # Default configurations for a generic coffee machine
@@ -66,6 +67,42 @@ class BlueMachine(CoffeeMachine):
             'placeholder': 1.0,
         }
 
+'''Vertuo Next'''
+class VenusMachine(CoffeeMachine):
+    def __init__(self, name: str, serial: str):
+        super().__init__(MachineType.VENUS, name, serial)
+        self.state_enum = VenusMachineState
+
+    def default_configurations(self):
+        # Default configurations for a generic coffee machine
+        return {
+            'placeholder': 1.0,
+        }
+
+'''Vertuo Pop'''
+class Dv2Machine(CoffeeMachine):
+    def __init__(self, name: str, serial: str):
+        super().__init__(MachineType.DV2, name, serial)
+        self.state_enum = VenusMachineState
+
+    def default_configurations(self):
+        # Default configurations for a generic coffee machine
+        return {
+            'placeholder': 1.0,
+        }
+
+'''Vertuo DV6'''
+class Dv6Machine(CoffeeMachine):
+    def __init__(self, name: str, serial: str):
+        super().__init__(MachineType.DV6, name, serial)
+        self.state_enum = VenusMachineState
+
+    def default_configurations(self):
+        # Default configurations for a generic coffee machine
+        return {
+            'placeholder': 1.0,
+        }
+
 class CoffeeMachineFactory:
     @staticmethod
     def get_coffee_machine(model_name: str, serial: str) -> CoffeeMachine:
@@ -77,6 +114,12 @@ class CoffeeMachineFactory:
                 return ExpertMachine(model_name, serial)
             case MachineType.PRODIGIO:
                 return ProdigoMachine(model_name, serial)
+            case MachineType.VENUS:
+                return VenusMachine(model_name, serial)
+            case MachineType.DV2:
+                return Dv2Machine(model_name, serial)
+            case MachineType.DV6:
+                return Dv6Machine(model_name, serial)
             case _:
                 print(f"No specific machine found for model {model_name}. Using default.")
                 return CoffeeMachine(model_name)
@@ -202,10 +245,12 @@ class ConnectivityFirmwareVersion:
 
 
 if __name__ == '__main__':
-    machine = CoffeeMachineFactory.get_coffee_machine('Expert&Milk_12345ABCD', '0123456789123')
+    machine = CoffeeMachineFactory.get_coffee_machine('Vertuo_DV6_XXXXXXXXXXXX', '0123456789123')
 
     print(machine)
 
     print(BrewType.is_brew_applicable_for_machine(BrewType.AMERICANO, machine.model))
 
     print(machine.configurations['temprature_control'])
+
+    print(machine)
