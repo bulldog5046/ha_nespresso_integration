@@ -362,6 +362,12 @@ class NespressoClient():
                         if self.command_response is not None:
                             break
                         await asyncio.sleep(1) 
+                        
+                    if self.command_response is not None:
+                        break  # Exit outer loop if a response was received
+
+                    # Delay between attempts
+                    await asyncio.sleep(1)
                 
                 if self.command_response is None:
                     _LOGGER.error(f'No response received from {self.machine.name} after 3 attempts')
