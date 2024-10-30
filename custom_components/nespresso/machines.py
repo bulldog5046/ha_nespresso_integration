@@ -52,19 +52,16 @@ class ProdigoMachine(CoffeeMachine):
     def default_configurations(self):
         configurations = super().default_configurations()
         # Default configurations for a generic coffee machine
-        return {
-            'placeholder': 1.0,
-        }
+        return configurations
 
 class BlueMachine(CoffeeMachine):
     def __init__(self, name: str, serial: str):
         super().__init__(MachineType.PRODIGIO, name, serial)
 
     def default_configurations(self):
+        configurations = super().default_configurations()
         # Default configurations for a generic coffee machine
-        return {
-            'placeholder': 1.0,
-        }
+        return configurations
 
 class CoffeeMachineFactory:
     @staticmethod
@@ -202,10 +199,14 @@ class ConnectivityFirmwareVersion:
 
 
 if __name__ == '__main__':
+    print("==== Expert ====")
     machine = CoffeeMachineFactory.get_coffee_machine('Expert&Milk_12345ABCD', '0123456789123')
-
     print(machine)
-
-    print(BrewType.is_brew_applicable_for_machine(BrewType.AMERICANO, machine.model))
-
-    print(machine.configurations['temprature_control'])
+    print("Brew Type Test:", BrewType.is_brew_applicable_for_machine(BrewType.AMERICANO, machine.model))
+    print("Temp Control Test:", machine.configurations['temprature_control'])
+    
+    print("==== Prodigio ====")
+    machine = CoffeeMachineFactory.get_coffee_machine('Prodigio_12345ABCD', '0123456789123')
+    print(machine)
+    print("Brew Type Test:", BrewType.is_brew_applicable_for_machine(BrewType.AMERICANO, machine.model))
+    print("Temp Control Test:", machine.configurations['temprature_control'])
