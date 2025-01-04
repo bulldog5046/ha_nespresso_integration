@@ -19,11 +19,11 @@ from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.helpers import device_registry as dr
 from homeassistant.const import (ATTR_DEVICE_CLASS, ATTR_ICON, CONF_ADDRESS,
                                  CONF_NAME, CONF_RESOURCE, CONF_SCAN_INTERVAL,
-                                 CONF_UNIT_SYSTEM, DEVICE_CLASS_TIMESTAMP,
+                                 CONF_UNIT_SYSTEM,
                                  EVENT_HOMEASSISTANT_STOP, STATE_UNKNOWN,
                                  CONF_TOKEN)
 from homeassistant.components.binary_sensor import (PLATFORM_SCHEMA, BinarySensorEntity,
-                                                   DEVICE_CLASS_MOTION, DEVICE_CLASS_DOOR)
+                                                   BinarySensorDeviceClass)
 from homeassistant.helpers.entity import Entity, DeviceInfo
 from homeassistant.components.bluetooth import async_ble_device_from_address
 
@@ -78,7 +78,7 @@ DEVICE_SENSOR_SPECIFICS = { "state":Sensor(None, None, None, None),
                             "Fault":Sensor(None, None, None, 'mdi:alert-circle-outline'),
                             "descaling_counter":Sensor(None, None, None, 'mdi:silverware-clean'),
                             "water_hardness":Sensor(None, None, None, 'mdi:water-percent'),
-                            "slider":Sensor(None, None, DEVICE_CLASS_DOOR, 'mdi:gate-and'),
+                            "slider":Sensor(None, None, BinarySensorDeviceClass.DOOR, 'mdi:gate-and'),
                             "caps_number": Sensor(CAPS_UNITS, None, DEVICE_CLASS_CAPS, 'mdi:counter'),
                             "water_fresh": Sensor(None, None, None, None)
                            }
